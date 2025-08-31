@@ -34,15 +34,25 @@ if (!$data) {
 $message = $data['message'] ?? '';
 $timestamp = $data['timestamp'] ?? date('Y-m-d H:i:s');
 $clientMac = $data['clientMac'] ?? 'Unknown';
+$method = $data['method'] ?? 'Email notification';
+$whatsappUrl = $data['whatsappUrl'] ?? '';
 
 // YOUR EMAIL ADDRESS - CHANGE THIS!
-$your_email = 'juliusntale30@gmail.com';  // ← CHANGE THIS TO YOUR EMAIL
+$your_email = 'your-email@example.com';  // ← CHANGE THIS TO YOUR EMAIL
 
 // Create email
 $subject = '🔔 New Internet Bundle Purchase Request';
 $email_body = "NEW PURCHASE REQUEST RECEIVED\n\n";
 $email_body .= "Time: $timestamp\n";
+$email_body .= "Method: $method\n";
 $email_body .= "Client MAC: $clientMac\n\n";
+
+if (!empty($whatsappUrl)) {
+    $email_body .= "📱 QUICK WHATSAPP LINK:\n";
+    $email_body .= $whatsappUrl . "\n\n";
+    $email_body .= "👆 Click the link above to send via WhatsApp\n\n";
+}
+
 $email_body .= "PURCHASE DETAILS:\n";
 $email_body .= str_repeat("=", 50) . "\n";
 $email_body .= $message . "\n";

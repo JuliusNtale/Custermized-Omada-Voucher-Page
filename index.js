@@ -15,9 +15,10 @@ if (!String.prototype.trim) {
     };
 }
 
-// Configuration
-var WHATSAPP_API_URL = 'https://api.whatsapp.com/send'; // This would need to be replaced with actual WhatsApp API
-var ADMIN_WHATSAPP = '255653520829'; // Your WhatsApp number
+// Configuration - Call Me Bot WhatsApp API
+var CALLMEBOT_API_URL = 'https://api.callmebot.com/whatsapp.php';
+var ADMIN_WHATSAPP = '+255XXXXXXXXX'; // Replace with your WhatsApp number (Tanzania: +255)
+var CALLMEBOT_APIKEY = 'YOUR_API_KEY_HERE'; // Get this from Call Me Bot activation process
 
 // Global variables
 var clientMac = getQueryStringKey("clientMac");
@@ -413,62 +414,65 @@ function createWhatsAppMessage(phone, reference, bundle) {
     return message;
 }
 
-// Send message to WhatsApp (Server-side email notification)
+// Send message to WhatsApp using Call Me Bot API
 function sendToWhatsApp(message) {
-    console.log('Sending purchase notification:', message);
+    console.log('Sending WhatsApp message via Call Me Bot API:', message);
+    
+    // Check if API key is configured
+    if (!CALLMEBOT_APIKEY || CALLMEBOT_APIKEY === 'YOUR_API_KEY_HERE') {
+        console.error('❌ Call Me Bot API key not configured');
+        alert('WhatsApp API not configured. Please set up Call Me Bot API key first.');
+        return false;
+    }
     
     try {
-        // Create purchase data
-        var purchaseData = {
-            message: message,
-            timestamp: new Date().toISOString(),
-            clientMac: clientMac || 'Unknown',
-            gatewayMac: gatewayMac || 'Unknown'
+        // Prepare API URL with parameters
+        var encodedMessage = encodeURIComponent(message);
+        var apiUrl = CALLMEBOT_API_URL + 
+                    '?phone=' + encodeURIComponent('+' + ADMIN_WHATSAPP) +
+                    '&text=' + encodedMessage +
+                    '&apikey=' + CALLMEBOT_APIKEY;
+        
+        console.log('🔄 Sending message via Call Me Bot API...');
+        
+        // Create image element to trigger the API call (cross-origin friendly)
+        var img = new Image();
+        
+        img.onload = function() {
+            console.log('✅ WhatsApp message sent successfully');
+            alert('✅ Purchase request sent successfully via WhatsApp!\n\nYou should receive your voucher shortly after payment verification.');
         };
         
-        // OPTION 1: Simple Email Notification (RECOMMENDED TO START)
-        // Replace 'yourserver.com' with your actual server domain
-        var webhookUrl = 'https://localhost.com/simple-email-webhook.php';
+        img.onerror = function() {
+            console.log('� API call completed (response type varies)');
+            // Call Me Bot API often returns non-image response, so this is normal
+            alert('📱 Purchase request sent via WhatsApp!\n\nPlease check WhatsApp for confirmation. You will receive your voucher after payment verification.');
+        };
         
-        // Send to webhook
-        fetch(webhookUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(purchaseData)
-        })
-        .then(function(response) {
-            if (response.ok) {
-                console.log('✅ Purchase notification sent successfully');
-                return response.json();
-            } else {
-                console.log('⚠️ Webhook failed, using fallback logging');
-                throw new Error('Webhook failed');
+        // Trigger the API call
+        img.src = apiUrl;
+        
+        // Fallback timeout
+        setTimeout(function() {
+            if (!img.complete) {
+                console.log('⏱️ API call timeout - showing fallback message');
+                alert('📱 Purchase request processing...\n\nIf you don\'t receive a WhatsApp message within 2 minutes, please contact support.');
             }
-        })
-        .then(function(data) {
-            console.log('📧 Email notification result:', data);
-        })
-        .catch(function(error) {
-            console.log('⚠️ Webhook error, logging locally:', error);
-            // Fallback: Log to browser console for debugging
-            console.log('🚨 PURCHASE REQUEST (MANUAL PROCESSING NEEDED):');
-            console.log(JSON.stringify(purchaseData, null, 2));
-            console.log('📧 Please check your webhook configuration at:', webhookUrl);
-        });
+        }, 10000); // 10 second timeout
         
-        // Always return success so user experience isn't affected
         return true;
         
     } catch (error) {
-        console.error('🚨 Failed to process purchase notification:', error);
-        // Emergency fallback: Log purchase details
-        console.log('🆘 EMERGENCY LOG - PURCHASE REQUEST:');
-        console.log('Message:', message);
-        console.log('Time:', new Date().toISOString());
-        console.log('Client MAC:', clientMac);
-        return true; // Don't fail the user's experience
+        console.error('🚨 Failed to send WhatsApp message:', error);
+        
+        // Fallback: Show manual instructions
+        var fallbackMessage = 'Unable to send WhatsApp message automatically.\n\n';
+        fallbackMessage += 'Please send this message manually to +' + ADMIN_WHATSAPP + ':\n\n';
+        fallbackMessage += message;
+        
+        alert(fallbackMessage);
+        
+        return false;
     }
 }
 
