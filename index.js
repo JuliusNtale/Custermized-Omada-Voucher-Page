@@ -17,8 +17,8 @@ if (!String.prototype.trim) {
 
 // Configuration - Call Me Bot WhatsApp API
 var CALLMEBOT_API_URL = 'https://api.callmebot.com/whatsapp.php';
-var ADMIN_WHATSAPP = '+255XXXXXXXXX'; // Replace with your WhatsApp number (Tanzania: +255)
-var CALLMEBOT_APIKEY = 'YOUR_API_KEY_HERE'; // Get this from Call Me Bot activation process
+var ADMIN_WHATSAPP = '+255653520829'; // Your actual WhatsApp number
+var CALLMEBOT_APIKEY = '9445949'; // Your actual Call Me Bot API key
 
 // Global variables
 var clientMac = getQueryStringKey("clientMac");
@@ -28,6 +28,12 @@ var ssidName = getQueryStringKey("ssidName") || undefined;
 var radioId = !!getQueryStringKey("radioId") ? Number(getQueryStringKey("radioId")) : undefined;
 var vid = !!getQueryStringKey("vid") ? Number(getQueryStringKey("vid")) : undefined;
 var originUrl = getQueryStringKey("originUrl");
+
+// Additional network information variables
+var clientIp = getQueryStringKey("clientIp") || getClientIP();
+var deviceName = getQueryStringKey("deviceName") || getDeviceName();
+var userAgent = navigator.userAgent;
+var deviceInfo = getDeviceInfo();
 
 // Utility functions
 function getQueryStringKey(key) {
@@ -46,6 +52,81 @@ function getQueryStringAsObject() {
         }
     }
     return result;
+}
+
+// Device Information Functions
+function getClientIP() {
+    // Try to get IP from various sources
+    var ip = getQueryStringKey("clientIp") || getQueryStringKey("ip") || getQueryStringKey("userIp");
+    if (ip) return ip;
+    
+    // If not available from query params, return placeholder
+    return "Auto-detect";
+}
+
+function getDeviceName() {
+    // Try to get device name from query params first
+    var deviceName = getQueryStringKey("deviceName") || getQueryStringKey("hostname");
+    if (deviceName) return deviceName;
+    
+    // Try to determine device type from user agent
+    var userAgent = navigator.userAgent.toLowerCase();
+    var deviceType = "Unknown Device";
+    
+    if (userAgent.indexOf("android") > -1) {
+        deviceType = "Android Device";
+    } else if (userAgent.indexOf("iphone") > -1 || userAgent.indexOf("ipad") > -1) {
+        deviceType = "iOS Device";
+    } else if (userAgent.indexOf("windows") > -1) {
+        deviceType = "Windows Device";
+    } else if (userAgent.indexOf("mac") > -1) {
+        deviceType = "Mac Device";
+    } else if (userAgent.indexOf("linux") > -1) {
+        deviceType = "Linux Device";
+    }
+    
+    return deviceType;
+}
+
+function getDeviceInfo() {
+    var info = {};
+    var userAgent = navigator.userAgent;
+    
+    // Browser information
+    if (userAgent.indexOf("Chrome") > -1) {
+        info.browser = "Chrome";
+    } else if (userAgent.indexOf("Firefox") > -1) {
+        info.browser = "Firefox";
+    } else if (userAgent.indexOf("Safari") > -1) {
+        info.browser = "Safari";
+    } else if (userAgent.indexOf("Edge") > -1) {
+        info.browser = "Edge";
+    } else {
+        info.browser = "Unknown";
+    }
+    
+    // Platform information
+    info.platform = navigator.platform || "Unknown";
+    
+    // Screen information
+    if (screen.width && screen.height) {
+        info.screenResolution = screen.width + "x" + screen.height;
+    }
+    
+    // Language
+    info.language = navigator.language || navigator.userLanguage || "Unknown";
+    
+    return info;
+}
+
+function getNetworkTimestamp() {
+    return new Date().toLocaleString() + " (Local Time)";
+}
+
+function formatMacAddress(mac) {
+    if (!mac) return "N/A";
+    // Ensure MAC address is properly formatted
+    return mac.toUpperCase().replace(/(.{2})/g, "$1:").slice(0, -1);
 }
 
 // AJAX utility with timeout and better error handling
@@ -397,7 +478,8 @@ function handlePurchaseSubmit() {
 
 // Create WhatsApp message
 function createWhatsAppMessage(phone, reference, bundle) {
-    var timestamp = new Date().toLocaleString();
+    var timestamp = getNetworkTimestamp();
+    var deviceInformation = getDeviceInfo();
     
     var message = "🔔 NEW INTERNET BUNDLE PURCHASE REQUEST\n\n";
     message += "📅 Time: " + timestamp + "\n";
@@ -406,10 +488,45 @@ function createWhatsAppMessage(phone, reference, bundle) {
     message += "📦 Package: " + bundle.description + "\n";
     message += "💵 Amount: " + bundle.price + " TZS\n";
     message += "⏰ Duration: " + bundle.duration + "\n\n";
-    message += "🌐 Network Details:\n";
+    
+    // Enhanced Network Details
+    message += "🌐 NETWORK & DEVICE DETAILS:\n";
+    message += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
     message += "📡 SSID: " + (ssidName || 'N/A') + "\n";
-    message += "🔗 Client MAC: " + (clientMac || 'N/A') + "\n\n";
-    message += "Please verify payment and create voucher for customer.";
+    message += "🔗 Client MAC: " + formatMacAddress(clientMac) + "\n";
+    message += "📶 AP MAC: " + formatMacAddress(apMac) + "\n";
+    message += "🌐 Gateway MAC: " + formatMacAddress(gatewayMac) + "\n";
+    message += "🖥️ Client IP: " + (clientIp || 'Auto-detecting...') + "\n";
+    message += "📱 Device Name: " + (deviceName || 'Unknown') + "\n";
+    
+    // Additional device information
+    message += "\n🔧 DEVICE INFORMATION:\n";
+    message += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+    message += "🌐 Browser: " + deviceInformation.browser + "\n";
+    message += "💻 Platform: " + deviceInformation.platform + "\n";
+    message += "📺 Resolution: " + (deviceInformation.screenResolution || 'Unknown') + "\n";
+    message += "🗣️ Language: " + deviceInformation.language + "\n";
+    
+    // Network configuration details
+    if (radioId !== undefined) {
+        message += "📻 Radio ID: " + radioId + "\n";
+    }
+    if (vid !== undefined) {
+        message += "🏷️ VLAN ID: " + vid + "\n";
+    }
+    
+    // Origin URL for debugging
+    if (originUrl) {
+        message += "🔗 Origin URL: " + originUrl + "\n";
+    }
+    
+    message += "\n📋 ADMIN INSTRUCTIONS:\n";
+    message += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+    message += "1. ✅ Verify payment via M-Pesa/Banking\n";
+    message += "2. 🎫 Create voucher in Omada Controller\n";
+    message += "3. 📱 Send voucher code to customer\n";
+    message += "4. 👤 Customer device: " + formatMacAddress(clientMac) + "\n\n";
+    message += "⚠️ Keep this message for support reference";
     
     return message;
 }
@@ -595,3 +712,81 @@ if (document.readyState === 'complete') {
 window.onload = function() {
     initializePortal();
 };
+
+// Enhanced Network Information Debug Function
+function debugNetworkInfo() {
+    console.log("=== NETWORK DEBUGGING INFORMATION ===");
+    console.log("Client MAC:", clientMac);
+    console.log("AP MAC:", apMac);
+    console.log("Gateway MAC:", gatewayMac);
+    console.log("SSID Name:", ssidName);
+    console.log("Client IP:", clientIp);
+    console.log("Device Name:", deviceName);
+    console.log("Radio ID:", radioId);
+    console.log("VLAN ID:", vid);
+    console.log("Origin URL:", originUrl);
+    console.log("User Agent:", userAgent);
+    console.log("Device Info:", deviceInfo);
+    console.log("All Query Params:", getQueryStringAsObject());
+    
+    // Test message creation
+    var testBundle = {
+        description: "Test Bundle",
+        price: "5000",
+        duration: "24 hours"
+    };
+    var testMessage = createWhatsAppMessage("+255700000000", "TEST123", testBundle);
+    console.log("=== TEST WHATSAPP MESSAGE ===");
+    console.log(testMessage);
+    
+    return {
+        clientMac: clientMac,
+        apMac: apMac,
+        gatewayMac: gatewayMac,
+        ssidName: ssidName,
+        clientIp: clientIp,
+        deviceName: deviceName,
+        radioId: radioId,
+        vid: vid,
+        originUrl: originUrl,
+        deviceInfo: deviceInfo,
+        allParams: getQueryStringAsObject()
+    };
+}
+
+// Test WhatsApp API function
+function testWhatsAppAPI() {
+    console.log('🧪 Testing WhatsApp API...');
+    
+    // Check configuration
+    if (!CALLMEBOT_APIKEY || CALLMEBOT_APIKEY === 'YOUR_API_KEY_HERE') {
+        console.error('❌ API Key not configured');
+        alert('❌ WhatsApp API Test Failed\n\nReason: API key not configured\nSolution: Check config.production.js file');
+        return false;
+    }
+    
+    if (!ADMIN_WHATSAPP || ADMIN_WHATSAPP === '+255XXXXXXXXX') {
+        console.error('❌ WhatsApp number not configured');
+        alert('❌ WhatsApp API Test Failed\n\nReason: WhatsApp number not configured\nSolution: Check config.production.js file');
+        return false;
+    }
+    
+    // Create test message with enhanced network details
+    var testBundle = {
+        description: "API Test Bundle",
+        price: "1000",
+        duration: "1 hour"
+    };
+    var testMessage = createWhatsAppMessage("+255700000000", "API-TEST-" + Date.now(), testBundle);
+    
+    console.log('📱 Sending test message to:', ADMIN_WHATSAPP);
+    console.log('🔑 Using API key:', CALLMEBOT_APIKEY);
+    console.log('📝 Test message:', testMessage);
+    
+    // Send test message
+    return sendToWhatsApp(testMessage);
+}
+
+// Make functions available globally for console testing
+window.debugNetworkInfo = debugNetworkInfo;
+window.testWhatsAppAPI = testWhatsAppAPI;
