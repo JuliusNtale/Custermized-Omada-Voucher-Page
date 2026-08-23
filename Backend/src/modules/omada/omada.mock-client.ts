@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { NotFoundError } from '../../lib/errors.js';
+import { NotFoundError, ValidationError } from '../../lib/errors.js';
 import type { Logger } from '../../lib/logger.js';
 import type { HttpRequestOptions } from './omada.http.js';
 import type { IOmadaClient } from './omada.client.js';
@@ -60,6 +60,20 @@ export class MockOmadaClient implements IOmadaClient {
     const rest = stripPrefix(path, this.cfg.omadaId);
 
     this.logger.debug({ event: 'omada.mock.request', method, path: rest }, 'Mock Omada request');
+
+    // Grid/list endpoints REQUIRE page+pageSize on the real controller
+    // (confirmed live - omitting them is an HTTP 400, not an empty result;
+    // see omada.client.ts / omada.voucher.service.ts). This mock enforces
+    // the same requirement so a missing query param is caught by tests
+    // instead of only surfacing against a real controller.
+    const requiresPagination = /^\/sites$|^\/sites\/[^/]+\/hotspot\/voucher-groups$|^\/sites\/[^/]+\/hotspot\/voucher-groups\/[^/]+$/;
+    if (method === 'GET' && requiresPagination.test(rest)) {
+      if (!opts.query?.page || !opts.query?.pageSize) {
+        throw new ValidationError('Mock Omada: page/pageSize are required query params for this endpoint', {
+          path: rest,
+        });
+      }
+    }
 
     // --- sites ---------------------------------------------------------
     let m = rest.match(/^\/sites$/);

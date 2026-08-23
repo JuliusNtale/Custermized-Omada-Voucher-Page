@@ -1,6 +1,6 @@
 import type { Voucher } from '@prisma/client';
 import type { Logger } from '../../lib/logger.js';
-import { VoucherCreationError } from '../../lib/errors.js';
+import { AppError, VoucherCreationError } from '../../lib/errors.js';
 import type { PaymentRepository } from '../payment/payment.repository.js';
 import type { PackageRepository } from '../catalog/package.repository.js';
 import type { PortalSessionRepository } from '../portal/portal-session.repository.js';
@@ -70,8 +70,13 @@ export class VoucherProvisioningService {
         durationSeconds: pkg.durationSeconds,
         downLimit: pkg.downloadLimit ?? undefined,
         upLimit: pkg.uploadLimit ?? undefined,
-        currency: pkg.currency,
-        unitPrice: pkg.price,
+        // NOT currency/unitPrice: confirmed live against
+        // .../hotspot/voucher-groups/currency-list that TZS is not in
+        // Omada's supported currency list (errorCode -42060 "Currency is
+        // not supported" otherwise). Our own Payment/Package tables are
+        // already the source of truth for price - Omada's voucher price
+        // field is purely cosmetic (its own UI/print-out), so we simply
+        // don't set it rather than picking an incorrect substitute currency.
       });
 
       const expiresAt = new Date(Date.now() + pkg.durationSeconds * 1000);
@@ -99,6 +104,10 @@ export class VoucherProvisioningService {
           event: 'voucher.provision.failed',
           paymentId,
           err: err instanceof Error ? err.message : String(err),
+          // AppError.details carries the Omada error body (errorCode/msg) -
+          // without this, failures like an unsupported currency or a missing
+          // required query param are invisible in the logs.
+          ...(err instanceof AppError ? { details: err.details } : {}),
         },
         'Voucher provisioning failed',
       );

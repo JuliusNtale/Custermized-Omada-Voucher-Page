@@ -1,0 +1,13 @@
+# Cloudflare Tunnel config for exposing ONLY the backend's webhook endpoint
+# publicly. Omada Controller is never routed here and stays LAN-only.
+#
+# tunnel id: wifi-backend-webhook (fde68d72-fc90-4345-bed6-b7f7ba287963)
+# credentials-file is bind-mounted in from cloudflared/creds.json (gitignored
+# - never commit it; it's equivalent to a password for this tunnel).
+tunnel: fde68d72-fc90-4345-bed6-b7f7ba287963
+credentials-file: /etc/cloudflared/creds.json
+
+ingress:
+  - hostname: webhooks.neuraltale.com
+    service: http://backend:3000
+  - service: http_status:404

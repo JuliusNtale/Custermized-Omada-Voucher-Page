@@ -61,6 +61,16 @@ services:
       - path: ./Backend/.env
         required: false
     environment:
+      # Force production regardless of what Backend/.env says (that file is
+      # also used for host-side `npm run dev`, which wants NODE_ENV=development
+      # for pino-pretty - not installed in this production image).
+      NODE_ENV: production
+      # Bind all interfaces inside the container - Backend/.env's HOST=localhost
+      # is for host-side `npm run dev`; a container bound to loopback is
+      # unreachable through Docker's published port (connections get accepted
+      # by the port-forwarding layer but dropped since nothing's listening on
+      # the container's actual interface).
+      HOST: 0.0.0.0
       # On the shared Docker network reach Omada by service name, not its IP.
       OMADA_BASE_URL: https://omada:8043
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/wifi_business
@@ -69,6 +79,24 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      - hotspot
+
+  # Exposes ONLY the backend (its /api/payments/webhook) to the public
+  # internet, via an outbound-only connection to Cloudflare - no router
+  # port-forwarding, no inbound firewall holes. Omada is never routed here;
+  # it stays LAN-only. See cloudflared/config.yml for the ingress rule and
+  # Backend/README.md for how the tunnel/DNS route were created.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared-tunnel
+    restart: unless-stopped
+    command: tunnel --config /etc/cloudflared/config.yml run
+    volumes:
+      - ./cloudflared/config.yml:/etc/cloudflared/config.yml:ro
+      - ./cloudflared/creds.json:/etc/cloudflared/creds.json:ro
+    depends_on:
+      - backend
     networks:
       - hotspot
 

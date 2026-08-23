@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
+import fastifyStatic from '@fastify/static';
 import { ZodError } from 'zod';
 import { env } from './config/env.js';
 import { logger } from './lib/logger.js';
@@ -35,6 +38,14 @@ export function buildApp(): FastifyInstance {
   void app.register(cors, {
     origin: env.APP_URL ? [env.APP_URL] : true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  });
+
+  // The captive portal itself - plain static HTML/CSS/JS (Backend/public/),
+  // served by this same process so there's one deployable service rather
+  // than a separate frontend app. It talks to the /api/* routes below over
+  // fetch(); it never touches Omada or the payment provider directly.
+  void app.register(fastifyStatic, {
+    root: path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public'),
   });
 
   // Request logging with a per-request correlation id so one customer

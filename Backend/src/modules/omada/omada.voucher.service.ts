@@ -110,15 +110,22 @@ export class OmadaVoucherService {
 
   async listVoucherGroups(siteId: string): Promise<OmadaVoucherGroup[]> {
     const path = OMADA_PATHS.voucherGroups(this.client.cfg.omadaId, siteId);
+    // page/pageSize are required query params on this (and the group-detail)
+    // endpoint - omitting them is an HTTP 400, not an empty result. Confirmed
+    // live the same way the sites-listing bug was (see omada.client.ts).
     const grid = await this.client.request<OmadaGrid<OmadaVoucherGroup>>(path, {
       method: 'GET',
+      query: { page: 1, pageSize: 1000 },
     });
     return grid?.data ?? [];
   }
 
   async getVoucherGroup(siteId: string, groupId: string): Promise<OmadaVoucherGroup> {
     const path = OMADA_PATHS.voucherGroup(this.client.cfg.omadaId, siteId, groupId);
-    return this.client.request<OmadaVoucherGroup>(path, { method: 'GET' });
+    return this.client.request<OmadaVoucherGroup>(path, {
+      method: 'GET',
+      query: { page: 1, pageSize: 1000 },
+    });
   }
 
   async deleteVoucherGroup(siteId: string, groupId: string): Promise<void> {

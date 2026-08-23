@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+cloudflared/creds.json
 
 # --- Node / Backend ---
 node_modules/
