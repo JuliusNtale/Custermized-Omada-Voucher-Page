@@ -4,7 +4,16 @@ services:
     # Pinned (never :latest, per the project's own design goal) - see
     # Backend/docs/ARCHITECTURE.md for why: :latest is a moving target and a
     # major-version jump can change the Open API surface without warning.
-    image: mbentley/omada-controller:6.2.14.11
+    #
+    # MUST stay on the v5.x line on this hardware (Raspberry Pi 4 / Cortex-A72):
+    # v6+ images ship MongoDB 8, which requires armv8.2-a CPU support that the
+    # Pi 4 does not have (container crash-loops with "your system does not
+    # support the armv8.2-a or later microarchitecture" - see
+    # https://github.com/mbentley/docker-omada-controller/blob/master/README.md#your-system-does-not-support-avx-or-armv82-a).
+    # v5.15.24.19 (MongoDB 3.6) is also the exact version this backend's
+    # omada.paths.ts / omada-openapi.json were verified against - see
+    # Backend/README.md's "Omada endpoint verification" section.
+    image: mbentley/omada-controller:5.15.24.19
     container_name: omada-controller
     restart: unless-stopped
 
