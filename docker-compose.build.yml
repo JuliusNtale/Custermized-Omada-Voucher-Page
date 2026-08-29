@@ -1,0 +1,13 @@
+# Opt-in overlay for building the backend image locally instead of pulling it
+# from GHCR. Not loaded automatically (it is not docker-compose.override.yml).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml build backend
+#   docker compose up -d          # then run as normal
+#
+# Use this on a dev machine, or on the Pi only if you have no other option -
+# building here is slow and memory-hungry (that is what the GHCR image avoids).
+services:
+  backend:
+    build:
+      context: ./Backend
+    pull_policy: build

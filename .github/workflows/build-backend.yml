@@ -1,0 +1,69 @@
+name: build-backend
+
+# Builds the backend container image OFF the Raspberry Pi and publishes it to
+# GHCR, so the Pi only ever `docker compose pull`s (no npm install / tsc on the
+# Pi - that was pushing it into swap and taking 15+ min).
+#
+# Runs on GitHub's free native ARM runner (public repo), so the linux/arm64
+# image is built without QEMU emulation.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Backend/**'
+      - '.github/workflows/build-backend.yml'
+  workflow_dispatch: {}
+
+concurrency:
+  group: build-backend
+  cancel-in-progress: true
+
+env:
+  IMAGE: ghcr.io/neuraltaletechnologies/omada-radius-server-backend
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=latest
+            type=sha,format=long
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./Backend
+          platforms: linux/arm64
+          push: true
+          # No provenance/SBOM attestations: they roughly quadruple the image
+          # size on disk (883 MB -> ~200 MB) and the Pi has none to spare.
+          provenance: false
+          sbom: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - run: |
+          echo "### Backend image published" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ steps.meta.outputs.tags }}" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "On the Pi: \`docker compose pull backend && docker compose up -d backend\`" >> "$GITHUB_STEP_SUMMARY"
