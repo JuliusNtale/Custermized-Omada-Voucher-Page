@@ -53,6 +53,16 @@ export class PortalService {
     const siteId = session.siteId ?? env.OMADA_SITE_ID;
     if (!siteId) throw new ValidationError('No Omada site id available for client authentication', { paymentId });
 
+    if (env.OMADA_PORTAL_AUTH_MODE === 'portal') {
+      // Fallback path: the classic external-portal form POST is done by the
+      // browser, not here. Not wired yet - it needs the exact field set
+      // (radioId/gatewayMac/vid) confirmed against a real AP redirect first.
+      throw new ValidationError(
+        "OMADA_PORTAL_AUTH_MODE=portal is not implemented yet - use 'api' mode",
+        { paymentId },
+      );
+    }
+
     await this.omadaClients.authorizeClient(siteId, session.clientMac);
     this.logger.info(
       { event: 'portal.client.authenticated', paymentId, clientMac: session.clientMac },

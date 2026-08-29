@@ -2,7 +2,7 @@
   "name": "wifi-business-backend",
   "version": "0.1.0",
   "private": true,
-  "description": "Wi-Fi hotspot/voucher backend: Omada Controller, payment and SMS orchestration",
+  "description": "Wi-Fi hotspot/voucher backend: Omada Controller + mobile-money payment orchestration",
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -12,6 +12,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "omada:connect": "tsx src/scripts/omada-connectivity-test.ts",
+    "omada:portal": "tsx src/scripts/omada-portal-setup.ts",
     "clickpesa:connect": "tsx src/scripts/clickpesa-connectivity-test.ts",
     "test": "vitest run",
     "test:watch": "vitest",

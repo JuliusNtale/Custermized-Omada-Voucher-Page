@@ -29,13 +29,6 @@ enum VoucherStatus {
   FAILED
 }
 
-enum SmsStatus {
-  NOT_SENT
-  QUEUED
-  SENT
-  FAILED
-}
-
 enum JobStatus {
   PENDING
   RUNNING
@@ -107,7 +100,6 @@ model Payment {
   package      Package         @relation(fields: [packageId], references: [id])
   voucher      Voucher?
   portalSession PortalSession?
-  smsMessages  SmsMessage[]
   jobs         Job[]
 
   @@index([customerId])
@@ -158,34 +150,12 @@ model PortalSession {
 }
 
 // ---------------------------------------------------------------------------
-// SMS
-// ---------------------------------------------------------------------------
-
-model SmsMessage {
-  id                  String    @id @default(cuid())
-  paymentId           String
-  phoneNumber         String
-  message             String
-  provider            String
-  providerMessageId   String?
-  status              SmsStatus @default(NOT_SENT)
-  retries             Int       @default(0)
-  sentAt              DateTime?
-  createdAt           DateTime  @default(now())
-
-  payment Payment @relation(fields: [paymentId], references: [id])
-
-  @@index([paymentId])
-  @@index([status])
-}
-
-// ---------------------------------------------------------------------------
 // Background jobs (database-backed queue, upgradeable to Redis/BullMQ later)
 // ---------------------------------------------------------------------------
 
 model Job {
   id         String    @id @default(cuid())
-  type       String // e.g. PROVISION_VOUCHER | SEND_VOUCHER_SMS
+  type       String // PROVISION_VOUCHER
   entityId   String // idempotency key (paymentId / voucherId)
   payload    Json
   status     JobStatus @default(PENDING)

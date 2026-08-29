@@ -18,7 +18,6 @@ export default defineConfig({
       // process and make route-wiring tests non-deterministic.
       DATABASE_URL: '',
       PAYMENT_PROVIDER: 'none',
-      SMS_PROVIDER: 'none',
     },
     testTimeout: 15000,
   },

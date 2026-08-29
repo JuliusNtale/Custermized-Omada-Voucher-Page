@@ -6,12 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A commercial Wi-Fi hotspot / mobile-money voucher platform. Customers connect to Wi-Fi, get
 redirected to a captive portal, buy a data package (500/1000/6000/16000 TZS), pay by mobile
-money, and are auto-authenticated onto the network via TP-Link Omada Controller vouchers.
-Everything is intended to eventually run locally on a Raspberry Pi behind a TP-Link ER605/EAP225,
-with the Omada Controller in Docker.
+money (ClickPesa USSD-PUSH), and are auto-authenticated onto the network via the TP-Link Omada
+Controller. There is no SMS — the portal auto-authenticates the device and shows the voucher
+code on-screen. Everything runs locally on a Raspberry Pi 4 behind a TP-Link ER605 (+ an EAP,
+being added), with the Omada Controller and backend in Docker.
 
-The active code lives entirely under `Backend/` (Fastify API). `Captive Portal/` is a static
-HTML/CSS/JS template only — it is not yet wired to the backend. The root `Readme` file is the
+The live portal is `Backend/public/` (served by the API at `/`, publicly at
+`portal.neuraltale.com` via the Cloudflare tunnel). The top-level `Captive Portal/` directory
+is the original static template, superseded and kept for reference only. The root `Readme` file is the
 original project brief (architecture goals, hardware, roles, security requirements, SaaS
 roadmap) — read it for *why* decisions were made, not for current implementation status; treat
 `Backend/README.md` and `Backend/docs/ARCHITECTURE.md` as the source of truth for what's built.
@@ -103,16 +105,16 @@ mocking library) that simulates the token + sites endpoints, including 401-trigg
 error-code paths. Extend that mock's handlers rather than mocking `fetch`/`undici` directly when
 adding Omada test coverage.
 
-### Payment / provisioning ordering (not yet implemented, but the schema is built for it)
+### Payment / provisioning ordering
 
 The Prisma schema (`prisma/schema.prisma`) encodes explicit state machines
-(`PaymentStatus`, `VoucherStatus`, `SmsStatus`, `JobStatus`) rather than booleans, because the
+(`PaymentStatus`, `VoucherStatus`, `JobStatus`) rather than booleans, because the
 required flow is strict:
 
 ```
 PAYMENT_CREATED → PAYMENT_PENDING → PAYMENT_SUCCESS
   → CREATE_OMADA_VOUCHER   (only after verified SUCCESS)
-  → VOUCHER_CREATED → SEND_SMS → COMPLETED
+  → VOUCHER_CREATED → client auto-authenticated + code shown → COMPLETED
 ```
 
 A voucher must never be created before payment is verified `SUCCESS` via the payment provider's

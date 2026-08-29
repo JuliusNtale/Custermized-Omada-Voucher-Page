@@ -3,17 +3,14 @@ import { prisma } from '../../lib/prisma.js';
 import { logger as defaultLogger, type Logger } from '../../lib/logger.js';
 import { env } from '../../config/env.js';
 import { PrismaJobRepository, type JobRepository } from './job.repository.js';
-import { JOB_TYPES, type ProvisionVoucherPayload, type SendVoucherSmsPayload } from './job.types.js';
+import { JOB_TYPES, type ProvisionVoucherPayload } from './job.types.js';
 import { PrismaPaymentRepository } from '../payment/payment.repository.js';
 import { PrismaPackageRepository } from '../catalog/package.repository.js';
 import { PrismaPortalSessionRepository } from '../portal/portal-session.repository.js';
 import { PrismaVoucherRepository } from '../voucher/voucher.repository.js';
-import { PrismaSmsRepository } from '../sms/sms.repository.js';
 import { VoucherProvisioningService } from '../voucher/voucher-provisioning.service.js';
-import { SmsService } from '../sms/sms.service.js';
 import { OmadaVoucherService } from '../omada/omada.voucher.service.js';
 import { createOmadaClient } from '../omada/create-omada-client.js';
-import { getSmsProvider } from '../sms/sms.provider.factory.js';
 
 export interface JobRunner {
   /** Claim and process one batch of due jobs. Returns how many were attempted. */
@@ -27,9 +24,11 @@ export interface JobRunner {
  * claimed atomically (job.repository.ts's `claimDue`), dispatched by type,
  * and retried with exponential backoff up to `Job.maxAttempts` on failure.
  *
- * `SmsService` is built lazily (only when a SEND_VOUCHER_SMS job is actually
- * handled) so an unconfigured SMS_PROVIDER doesn't prevent the runner - and
- * therefore voucher provisioning - from starting.
+ * The only job type is PROVISION_VOUCHER: create exactly one Omada voucher
+ * for a payment that has already been independently verified SUCCESS. The
+ * customer receives connectivity via the captive portal's auto-login
+ * (POST /api/portal/authenticate) and the voucher code on-screen - there is
+ * no SMS step.
  */
 export function createJobRunner(logger: Logger = defaultLogger): JobRunner {
   const jobs: JobRepository = new PrismaJobRepository(prisma);
@@ -37,7 +36,6 @@ export function createJobRunner(logger: Logger = defaultLogger): JobRunner {
   const packageRepo = new PrismaPackageRepository(prisma);
   const portalSessionRepo = new PrismaPortalSessionRepository(prisma);
   const voucherRepo = new PrismaVoucherRepository(prisma);
-  const smsRepo = new PrismaSmsRepository(prisma);
 
   const omadaClient = createOmadaClient(logger);
   const omadaVoucherService = new OmadaVoucherService(omadaClient, logger);
@@ -47,28 +45,14 @@ export function createJobRunner(logger: Logger = defaultLogger): JobRunner {
     portalSessionRepo,
     voucherRepo,
     omadaVoucherService,
-    jobs,
     logger,
   );
-
-  let smsService: SmsService | undefined;
-  function getSmsService(): SmsService {
-    if (!smsService) {
-      smsService = new SmsService(paymentRepo, packageRepo, voucherRepo, smsRepo, getSmsProvider(), logger);
-    }
-    return smsService;
-  }
 
   async function handle(job: Job): Promise<void> {
     switch (job.type) {
       case JOB_TYPES.PROVISION_VOUCHER: {
         const payload = job.payload as unknown as ProvisionVoucherPayload;
         await provisioning.provision(payload.paymentId);
-        return;
-      }
-      case JOB_TYPES.SEND_VOUCHER_SMS: {
-        const payload = job.payload as unknown as SendVoucherSmsPayload;
-        await getSmsService().sendVoucherReadySms(payload.paymentId);
         return;
       }
       default:

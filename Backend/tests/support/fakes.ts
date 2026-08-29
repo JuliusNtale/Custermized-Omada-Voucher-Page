@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Customer, Job, JobStatus, Package, Payment, PaymentStatus, PortalSession, SmsMessage, Voucher, VoucherStatus } from '@prisma/client';
+import type { Customer, Job, JobStatus, Package, Payment, PaymentStatus, PortalSession, Voucher, VoucherStatus } from '@prisma/client';
 import type { PackageRepository } from '../../src/modules/catalog/package.repository.js';
 import type { CustomerRepository } from '../../src/modules/customer/customer.repository.js';
 import type {
@@ -12,7 +12,6 @@ import type {
   PortalSessionRepository,
 } from '../../src/modules/portal/portal-session.repository.js';
 import type { CreatedVoucherFields, VoucherRepository } from '../../src/modules/voucher/voucher.repository.js';
-import type { SmsRepository } from '../../src/modules/sms/sms.repository.js';
 import type { JobRepository } from '../../src/modules/jobs/job.repository.js';
 import type { JobType } from '../../src/modules/jobs/job.types.js';
 
@@ -206,49 +205,6 @@ export function makeFakeVoucherRepository(): VoucherRepository {
     },
     async listRecent() {
       return [...byPaymentId.values()];
-    },
-  };
-}
-
-export function makeFakeSmsRepository(): SmsRepository {
-  const byId = new Map<string, SmsMessage>();
-  return {
-    async findByPaymentId(paymentId) {
-      return (
-        [...byId.values()]
-          .filter((s) => s.paymentId === paymentId)
-          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0] ?? null
-      );
-    },
-    async create(paymentId, phoneNumber, message, provider) {
-      const sms: SmsMessage = {
-        id: randomUUID(),
-        paymentId,
-        phoneNumber,
-        message,
-        provider,
-        providerMessageId: null,
-        status: 'QUEUED',
-        retries: 0,
-        sentAt: null,
-        createdAt: new Date(),
-      };
-      byId.set(sms.id, sms);
-      return sms;
-    },
-    async markSent(id, providerMessageId) {
-      const s = byId.get(id);
-      if (!s) throw new Error('sms not found');
-      const updated: SmsMessage = { ...s, status: 'SENT', providerMessageId: providerMessageId ?? null, sentAt: new Date() };
-      byId.set(id, updated);
-      return updated;
-    },
-    async markFailed(id) {
-      const s = byId.get(id);
-      if (!s) throw new Error('sms not found');
-      const updated: SmsMessage = { ...s, status: 'FAILED', retries: s.retries + 1 };
-      byId.set(id, updated);
-      return updated;
     },
   };
 }

@@ -83,9 +83,3 @@ export class VoucherCreationError extends AppError {
     super('VOUCHER_CREATION_ERROR', message, 502, details);
   }
 }
-
-export class SmsProviderError extends AppError {
-  constructor(message: string, details?: AppErrorDetails) {
-    super('SMS_PROVIDER_ERROR', message, 502, details);
-  }
-}

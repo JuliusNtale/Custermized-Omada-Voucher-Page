@@ -168,3 +168,74 @@ export interface OmadaClientInfo {
   isGuest?: boolean;
   [key: string]: unknown;
 }
+
+/**
+ * Captive-portal config - subset of the controller's `PortalSetting` schema
+ * we actually set for an External Portal Server (authType=4). VERIFIED live:
+ * `authType`, `authTimeout`, `httpsRedirectEnable`, `landingPage`, `name`,
+ * `pageType` and `portalCustomize` are all required by the create validator
+ * even though most `portalCustomize` fields are cosmetic and unused when the
+ * portal page is hosted externally.
+ */
+export interface OmadaExternalServerPortal {
+  /** 2: URL (we always use URL, not IP). */
+  hostType?: 1 | 2;
+  /** 'http' | 'https' */
+  serverUrlScheme?: string;
+  /** hostname (+ optional path), WITHOUT the scheme, e.g. 'portal.example.com'. */
+  serverUrl?: string;
+}
+
+export interface OmadaPortalAuthTimeout {
+  customTimeout?: number;
+  /** 1: min, 2: hour, 3: day */
+  customTimeoutUnit?: 1 | 2 | 3;
+}
+
+export interface OmadaPortalCustomize {
+  /** 1 = en_US */
+  defaultLanguage: number;
+  logoDisplay: boolean;
+  welcomeEnable: boolean;
+  termsOfServiceEnable: boolean;
+  copyrightEnable: boolean;
+}
+
+export interface OmadaPortalSetting {
+  name: string;
+  enable: boolean;
+  /** SSID ids this portal is bound to. */
+  ssidList?: string[];
+  networkList?: string[];
+  /** 0: No Auth, 1: Simple Password, 2: External RADIUS, 4: External Portal Server, 11: Hotspot. */
+  authType: number;
+  authTimeout: OmadaPortalAuthTimeout;
+  httpsRedirectEnable: boolean;
+  /** 1: original URL, 2: promotional URL, 3: logout page. */
+  landingPage: number;
+  /** 1: default page, 2: uploaded page. */
+  pageType?: number;
+  externalPortal?: OmadaExternalServerPortal;
+  portalCustomize?: OmadaPortalCustomize;
+}
+
+/** A row from `GET .../portals`. */
+export interface OmadaPortalSummary {
+  id: string;
+  name: string;
+  enable: boolean;
+  ssidList?: string[];
+  networkList?: string[];
+  authType: number;
+}
+
+/** A row from `GET .../wireless-network/ssids`. */
+export interface OmadaSsidInfo {
+  ssidId: string;
+  name: string;
+  wlanId?: string;
+  band?: number;
+  /** 0: None (open), 3: WPA-Personal, ... */
+  security?: number;
+  [key: string]: unknown;
+}

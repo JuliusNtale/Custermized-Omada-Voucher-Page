@@ -20,15 +20,15 @@ Captive Portal (Next.js, separate repo)   -- before: static HTML template in ./C
   v
 Backend API (this repo)   [Fastify + PostgreSQL + Pino + Zod]
   |
-  +----------------------------+
-  |            |               |
-  v            v               v
-Payment      Omada Open     SMS provider
-provider     API (voucher)  (not yet impl.)
-  |            |
-  +------------+----------------> voucher provisioning -> client auth
+  +--------------------+
+  |                    |
+  v                    v
+Payment provider     Omada Open API
+(ClickPesa USSD)     (voucher + hotspot client auth)
+  |                    |
+  +--------------------+--> voucher provisioning -> client auth
   v
-verified payment only -> create Omada voucher -> send SMS
+verified payment only -> create Omada voucher -> auto-authenticate client
 ```
 
 ## Payment / provisioning ordering rule
@@ -36,12 +36,18 @@ verified payment only -> create Omada voucher -> send SMS
 ```
 PAYMENT_CREATED -> PAYMENT_PENDING -> PAYMENT_SUCCESS
   -> CREATE_OMADA_VOUCHER  (ONLY after verified SUCCESS)
-  -> VOUCHER_CREATED -> SEND_SMS -> COMPLETED
+  -> VOUCHER_CREATED -> client auto-authenticated + code shown -> COMPLETED
 ```
+
+(No SMS step - removed. The captive portal auto-authenticates the client via
+`POST /api/portal/authenticate` and displays the voucher code on-screen.)
 
 The backend must verify payment via the provider API/webhook; it **never trusts the
 frontend** to confirm payment, and it **never creates a voucher before the payment is
 verified SUCCESS** (with duplicate-webhook / idempotency guards).
+
+> SMS was removed from the flow (2026-08). The customer gets connectivity via the
+> portal's auto-login and the voucher code on-screen; no "voucher ready" SMS.
 
 ## Milestone roadmap
 
@@ -52,17 +58,20 @@ verified SUCCESS** (with duplicate-webhook / idempotency guards).
 5. ✅ Fake payment provider (`PAYMENT_PROVIDER=fake`)
 6. ✅ Payment state machine + idempotent, signature-verified webhook
 7. ✅ Voucher provisioning after verified payment (DB-backed job queue, `OMADA_MODE=mock` for dev)
-8. ✅ Fake SMS provider (`SMS_PROVIDER=fake`)
-9. ✅ End-to-end simulated purchase (see Backend/README.md "Local end-to-end purchase")
-10. External captive portal integration — next (routes exist: `/api/portal/*`; no Next.js portal yet)
-11. Real payment provider - `ClickPesaProvider` implemented against ClickPesa's own docs,
-    credentials verified live (token obtained); no real push payment triggered yet (needs a
-    public webhook URL + explicit go-ahead since it moves real money)
-12. Real SMS provider — not started (`SMS_PROVIDER=fake`)
-13. ✅ Real Omada authentication flow — `npm run omada:connect` succeeds against the live
-    controller (see "Live milestone: ACHIEVED" below); portal client-auth (`/api/portal/authenticate`)
-    implemented but not yet exercised against a real connected Wi-Fi client
-14. Production Docker Compose
+8. ✅ End-to-end simulated purchase (see Backend/README.md "Local end-to-end purchase")
+9. ✅ Real payment provider - `ClickPesaProvider` implemented against ClickPesa's own docs
+   (USSD-PUSH, checksum, `PAYMENT RECEIVED`/`PAYMENT FAILED` webhooks); credentials verified
+   live. Going live needs the checksum key + webhook URL registered in the dashboard.
+10. ✅ External Portal Server captive-portal flow: static portal in `Backend/public/` served at
+    `portal.neuraltale.com` (Cloudflare tunnel), `/api/portal/*` routes,
+    `src/scripts/omada-portal-setup.ts` provisions the Omada portal (authType=4) + open SSID.
+    End-to-end Wi-Fi test blocked on a physical EAP being adopted.
+11. ~~Real SMS provider~~ — **removed**. Portal auto-login + on-screen voucher code replace it.
+12. ✅ Real Omada authentication flow — `npm run omada:connect` succeeds against the live
+    controller; portal client-auth (`/api/portal/authenticate`) implemented, not yet exercised
+    against a real connected Wi-Fi client (`OMADA_PORTAL_AUTH_MODE=api`, `portal` fallback stubbed)
+13. Production Docker Compose
+14. Multi-tenant / RBAC admin
 
 ## Omada API verification checklist (do this against the running controller)
 

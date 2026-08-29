@@ -11,7 +11,7 @@
  *
  * Only mobile numbers (leading significant digit 6 or 7, per TCRA-allocated
  * ranges) are accepted - landline/short-code ranges are rejected since this
- * number is used for mobile-money push payments and SMS delivery.
+ * number is used for the mobile-money USSD-PUSH payment prompt.
  */
 export function normalizeTzPhone(raw: string): string | null {
   if (typeof raw !== 'string') return null;

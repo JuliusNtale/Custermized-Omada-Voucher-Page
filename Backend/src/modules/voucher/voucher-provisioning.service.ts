@@ -6,8 +6,6 @@ import type { PackageRepository } from '../catalog/package.repository.js';
 import type { PortalSessionRepository } from '../portal/portal-session.repository.js';
 import type { VoucherRepository } from './voucher.repository.js';
 import type { OmadaVoucherService } from '../omada/omada.voucher.service.js';
-import type { JobRepository } from '../jobs/job.repository.js';
-import { JOB_TYPES, type SendVoucherSmsPayload } from '../jobs/job.types.js';
 import { env } from '../../config/env.js';
 
 /**
@@ -24,7 +22,6 @@ export class VoucherProvisioningService {
     private readonly portalSessions: PortalSessionRepository,
     private readonly vouchers: VoucherRepository,
     private readonly omadaVouchers: OmadaVoucherService,
-    private readonly jobs: JobRepository,
     private readonly logger: Logger,
   ) {}
 
@@ -88,13 +85,8 @@ export class VoucherProvisioningService {
 
       this.logger.info(
         { event: 'voucher.provision.success', paymentId, voucherId: voucher.id },
-        'Voucher provisioned',
+        'Voucher provisioned - customer is auto-authenticated by the portal and shown the code',
       );
-
-      // Only now - voucher confirmed CREATED - is it safe to queue the SMS
-      // (spec section 17: never send "voucher ready" before it actually is).
-      const payload: SendVoucherSmsPayload = { paymentId };
-      await this.jobs.enqueue(JOB_TYPES.SEND_VOUCHER_SMS, paymentId, payload, paymentId);
 
       return voucher;
     } catch (err) {

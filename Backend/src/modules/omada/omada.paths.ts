@@ -65,6 +65,35 @@ export const OMADA_PATHS = {
   hotspotClientUnauth: (omadacId: string, siteId: string, clientMac: string) =>
     `/openapi/v1/${encodeURIComponent(omadacId)}/sites/${encodeURIComponent(siteId)}/hotspot/clients/${encodeURIComponent(clientMac)}/unauth`,
 
+  /**
+   * Captive-portal configuration (VERIFIED live against the running controller):
+   *   GET    .../sites/{siteId}/portals            list portals (summary rows)
+   *   POST   .../sites/{siteId}/portal             add a portal  -> { result: portalId }
+   *   GET    .../sites/{siteId}/portal/{portalId}  portal detail
+   *   PATCH  .../sites/{siteId}/portal/{portalId}  update a portal
+   *   DELETE .../sites/{siteId}/portal/{portalId}  delete a portal
+   * For an External Portal Server (authType=4) the controller auto-allows
+   * pre-auth access to `externalPortal.serverUrl`, so no walled-garden call
+   * is needed here.
+   */
+  portals: (omadacId: string, siteId: string) =>
+    `/openapi/v1/${encodeURIComponent(omadacId)}/sites/${encodeURIComponent(siteId)}/portals`,
+  portal: (omadacId: string, siteId: string) =>
+    `/openapi/v1/${encodeURIComponent(omadacId)}/sites/${encodeURIComponent(siteId)}/portal`,
+  portalById: (omadacId: string, siteId: string, portalId: string) =>
+    `/openapi/v1/${encodeURIComponent(omadacId)}/sites/${encodeURIComponent(siteId)}/portal/${encodeURIComponent(portalId)}`,
+
+  /** WLAN groups on a site (VERIFIED) - `[{ wlanId, name, primary }]`, no pagination. */
+  wlans: (omadacId: string, siteId: string) =>
+    `/openapi/v1/${encodeURIComponent(omadacId)}/sites/${encodeURIComponent(siteId)}/wireless-network/wlans`,
+  /**
+   * SSIDs in one WLAN group (VERIFIED) - grid `{ data: [{ ssidId, name, band,
+   * security, ... }] }`. page/pageSize are REQUIRED (400 without them), like
+   * the sites/voucher-group listings.
+   */
+  wlanSsids: (omadacId: string, siteId: string, wlanId: string) =>
+    `/openapi/v1/${encodeURIComponent(omadacId)}/sites/${encodeURIComponent(siteId)}/wireless-network/wlans/${encodeURIComponent(wlanId)}/ssids`,
+
   /** Hotspot voucher groups (VERIFIED paths; schemas pending confirmation). */
   voucherGroups: (omadacId: string, siteId: string) =>
     `/openapi/v1/${encodeURIComponent(omadacId)}/sites/${encodeURIComponent(siteId)}/hotspot/voucher-groups`,

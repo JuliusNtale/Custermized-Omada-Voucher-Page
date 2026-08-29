@@ -9,7 +9,6 @@ import { PrismaCustomerRepository } from '../modules/customer/customer.repositor
 import { PrismaPaymentRepository } from '../modules/payment/payment.repository.js';
 import { PrismaPortalSessionRepository } from '../modules/portal/portal-session.repository.js';
 import { PrismaVoucherRepository } from '../modules/voucher/voucher.repository.js';
-import { PrismaSmsRepository } from '../modules/sms/sms.repository.js';
 import { PrismaJobRepository } from '../modules/jobs/job.repository.js';
 import { PaymentService } from '../modules/payment/payment.service.js';
 import { PaymentWebhookService } from '../modules/payment/payment.webhook.service.js';
@@ -100,11 +99,9 @@ export async function paymentsRoutes(app: FastifyInstance): Promise<void> {
     const payment = await new PrismaPaymentRepository(prisma).findById(request.params.id);
     if (!payment) throw new NotFoundError('Payment not found');
     const voucher = await new PrismaVoucherRepository(prisma).findByPaymentId(payment.id);
-    const sms = await new PrismaSmsRepository(prisma).findByPaymentId(payment.id);
     return {
       paymentStatus: payment.status,
       voucherStatus: voucher?.status ?? 'NOT_CREATED',
-      smsStatus: sms?.status ?? 'NOT_SENT',
       voucherCode: voucher?.status === 'CREATED' ? voucher.voucherCode : undefined,
     };
   });

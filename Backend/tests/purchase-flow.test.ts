@@ -1,14 +1,11 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { logger } from '../src/lib/logger.js';
 import { PaymentService } from '../src/modules/payment/payment.service.js';
 import { PaymentWebhookService } from '../src/modules/payment/payment.webhook.service.js';
 import { VoucherProvisioningService } from '../src/modules/voucher/voucher-provisioning.service.js';
-import { SmsService } from '../src/modules/sms/sms.service.js';
 import { FakePaymentProvider } from '../src/modules/payment/providers/fake-payment.provider.js';
-import { FakeSmsProvider } from '../src/modules/sms/providers/fake-sms.provider.js';
 import { OmadaVoucherService } from '../src/modules/omada/omada.voucher.service.js';
 import { MockOmadaClient } from '../src/modules/omada/omada.mock-client.js';
-import { SmsProviderError } from '../src/lib/errors.js';
 import { JOB_TYPES } from '../src/modules/jobs/job.types.js';
 import type { IOmadaClient } from '../src/modules/omada/omada.client.js';
 import {
@@ -17,7 +14,6 @@ import {
   makeFakePackageRepository,
   makeFakePaymentRepository,
   makeFakePortalSessionRepository,
-  makeFakeSmsRepository,
   makeFakeVoucherRepository,
   makePackage,
 } from './support/fakes.js';
@@ -41,11 +37,9 @@ function buildHarness(omadaClient: IOmadaClient = new MockOmadaClient(
   const payments = makeFakePaymentRepository();
   const portalSessions = makeFakePortalSessionRepository();
   const vouchers = makeFakeVoucherRepository();
-  const smsMessages = makeFakeSmsRepository();
   const jobs = makeFakeJobRepository();
 
   const paymentProvider = new FakePaymentProvider(WEBHOOK_SECRET, logger);
-  const smsProvider = new FakeSmsProvider(logger);
 
   const paymentService = new PaymentService(packages, customers, payments, portalSessions, paymentProvider, logger);
   const webhookService = new PaymentWebhookService(payments, jobs, paymentProvider, logger);
@@ -56,23 +50,18 @@ function buildHarness(omadaClient: IOmadaClient = new MockOmadaClient(
     portalSessions,
     vouchers,
     omadaVoucherService,
-    jobs,
     logger,
   );
-  const smsService = new SmsService(payments, packages, vouchers, smsMessages, smsProvider, logger);
 
   return {
     packages,
     payments,
     vouchers,
-    smsMessages,
     jobs,
     paymentProvider,
-    smsProvider,
     paymentService,
     webhookService,
     provisioningService,
-    smsService,
   };
 }
 
@@ -82,8 +71,6 @@ async function runOneJob(h: ReturnType<typeof buildHarness>) {
   try {
     if (job.type === JOB_TYPES.PROVISION_VOUCHER) {
       await h.provisioningService.provision((job.payload as { paymentId: string }).paymentId);
-    } else if (job.type === JOB_TYPES.SEND_VOUCHER_SMS) {
-      await h.smsService.sendVoucherReadySms((job.payload as { paymentId: string }).paymentId);
     }
     await h.jobs.markDone(job.id);
   } catch (err) {
@@ -101,7 +88,7 @@ const purchaseInput = {
 };
 
 describe('End-to-end simulated purchase (spec section 32/37 phase 9)', () => {
-  it('drives payment -> verified webhook -> voucher -> SMS to completion', async () => {
+  it('drives payment -> verified webhook -> voucher CREATED to completion', async () => {
     const h = buildHarness();
 
     const created = await h.paymentService.createPayment(purchaseInput);
@@ -125,25 +112,16 @@ describe('End-to-end simulated purchase (spec section 32/37 phase 9)', () => {
     // ProvisionVoucherJob
     const voucherJob = await runOneJob(h);
     expect(voucherJob?.type).toBe(JOB_TYPES.PROVISION_VOUCHER);
-    let voucher = await h.vouchers.findByPaymentId(created.paymentId);
+    const voucher = await h.vouchers.findByPaymentId(created.paymentId);
     expect(voucher?.status).toBe('CREATED');
     expect(voucher?.voucherCode).toBeTruthy();
 
-    // SendVoucherSmsJob
-    const smsJob = await runOneJob(h);
-    expect(smsJob?.type).toBe(JOB_TYPES.SEND_VOUCHER_SMS);
-    const sms = await h.smsMessages.findByPaymentId(created.paymentId);
-    expect(sms?.status).toBe('SENT');
-    expect(sms?.message).toContain(voucher!.voucherCode!);
-
-    expect(h.smsProvider.sent).toHaveLength(1);
-    expect(h.smsProvider.sent[0].to).toBe('+255712345678');
-
-    // No more jobs left.
+    // No more jobs left - the portal auto-authenticates the client and shows
+    // the code; there is no SMS step.
     expect(await runOneJob(h)).toBeNull();
   });
 
-  it('is idempotent under a duplicate webhook: one payment, one voucher, one SMS job enqueued', async () => {
+  it('is idempotent under a duplicate webhook: one payment, one voucher, one provisioning job', async () => {
     const h = buildHarness();
     const created = await h.paymentService.createPayment(purchaseInput);
     const payment = await h.payments.findById(created.paymentId);
@@ -222,7 +200,7 @@ describe('End-to-end simulated purchase (spec section 32/37 phase 9)', () => {
     expect(second.paymentId).toBe(first.paymentId);
   });
 
-  it('Omada failure after payment: voucher ends FAILED and no SMS job is queued', async () => {
+  it('Omada failure after payment: voucher ends FAILED, no extra work is queued', async () => {
     const failingOmada: IOmadaClient = {
       cfg: {
         baseUrl: 'x',
@@ -258,44 +236,9 @@ describe('End-to-end simulated purchase (spec section 32/37 phase 9)', () => {
     const voucher = await h.vouchers.findByPaymentId(created.paymentId);
     expect(voucher?.status).toBe('FAILED');
 
+    // The only job is the (now-retrying) provisioning job - nothing new spawned.
     const jobs = await h.jobs.claimDue(10);
-    expect(jobs.filter((j) => j.type === JOB_TYPES.SEND_VOUCHER_SMS)).toHaveLength(0);
-  });
-
-  it('SMS failure after voucher creation: retried, and does not touch the voucher/payment', async () => {
-    const h = buildHarness();
-    const created = await h.paymentService.createPayment(purchaseInput);
-    const payment = await h.payments.findById(created.paymentId);
-    const { body, headers } = h.paymentProvider.buildWebhookPayload(
-      payment!.transactionReference,
-      payment!.providerTransactionId!,
-      'SUCCESS',
-    );
-    await h.webhookService.handle({ headers, rawBody: body });
-    await runOneJob(h); // provisions the voucher
-
-    h.smsProvider.failNext(1);
-    await expect(h.smsService.sendVoucherReadySms(created.paymentId)).rejects.toBeInstanceOf(SmsProviderError);
-
-    const voucher = await h.vouchers.findByPaymentId(created.paymentId);
-    expect(voucher?.status).toBe('CREATED'); // unaffected by the SMS failure
-
-    const failedSms = await h.smsMessages.findByPaymentId(created.paymentId);
-    expect(failedSms?.status).toBe('FAILED');
-    expect(failedSms?.retries).toBe(1);
-
-    // Retry succeeds.
-    const sent = await h.smsService.sendVoucherReadySms(created.paymentId);
-    expect(sent.status).toBe('SENT');
-  });
-
-  it('never sends the "voucher ready" SMS while the voucher is still FAILED', async () => {
-    const h = buildHarness();
-    const created = await h.paymentService.createPayment(purchaseInput);
-    await expect(h.smsService.sendVoucherReadySms(created.paymentId)).rejects.toThrow(
-      /voucher is not CREATED/,
-    );
-    expect(h.smsProvider.sent).toHaveLength(0);
+    expect(jobs.every((j) => j.type === JOB_TYPES.PROVISION_VOUCHER)).toBe(true);
   });
 });
 

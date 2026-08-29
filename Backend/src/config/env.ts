@@ -53,14 +53,22 @@ const envSchema = z.object({
   CLICKPESA_CHECKSUM_SECRET: z.string().optional(),
   CLICKPESA_HTTP_TIMEOUT_MS: z.coerce.number().int().positive().default(15000),
 
-  // SMS provider (Phase 8+).
-  SMS_PROVIDER: z.enum(['fake', 'manual', 'none']).default('none'),
-  SMS_API_URL: z.string().optional(),
-  SMS_API_KEY: z.string().optional(),
-  SMS_API_SECRET: z.string().optional(),
-  SMS_SENDER_ID: z.string().optional(),
+  // Captive portal (External Portal Server, Omada authType=4). See
+  // src/modules/portal/ and src/scripts/omada-portal-setup.ts.
+  PORTAL_PUBLIC_URL: z.string().optional(),
+  /** Comma-separated Omada SSID ids the portal binds to (used by `npm run omada:portal`). */
+  PORTAL_SSID_IDS: z.string().optional(),
+  /**
+   * How the backend authorises a client after a verified payment:
+   *  - 'api'    : POST .../hotspot/clients/{mac}/auth via the Omada Open API
+   *  - 'portal' : the portal page POSTs the classic external-portal form to
+   *               OMADA_PORTAL_AUTH_URL (fallback if 'api' doesn't take on
+   *               an authType=4 SSID - decided during the first live AP test).
+   */
+  OMADA_PORTAL_AUTH_MODE: z.enum(['api', 'portal']).default('api'),
+  OMADA_PORTAL_AUTH_URL: z.string().optional(),
 
-  // Database-backed job queue (voucher provisioning + SMS dispatch).
+  // Database-backed job queue (voucher provisioning).
   JOB_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(2000),
   JOB_BATCH_SIZE: z.coerce.number().int().positive().default(5),
 
@@ -90,8 +98,34 @@ export function parseEnv(raw: Record<string, unknown>): Env {
   return parsed.data;
 }
 
+/**
+ * Cross-field checks that Zod's per-field schema can't express. Kept separate
+ * from `parseEnv` so unit tests can call `parseEnv` with partial fixtures.
+ */
+export function assertEnvConsistency(e: Env): void {
+  if (
+    e.NODE_ENV === 'production' &&
+    e.PAYMENT_PROVIDER === 'clickpesa' &&
+    !e.CLICKPESA_CHECKSUM_SECRET
+  ) {
+    throw new ValidationError('Environment validation failed', {
+      issues: [
+        'CLICKPESA_CHECKSUM_SECRET: required in production with PAYMENT_PROVIDER=clickpesa - ' +
+          'without it inbound payment webhooks cannot be authenticated. Enable checksums for ' +
+          'the app in the ClickPesa dashboard and set the checksum key here.',
+      ],
+    });
+  }
+  if (e.OMADA_PORTAL_AUTH_MODE === 'portal' && !e.OMADA_PORTAL_AUTH_URL) {
+    throw new ValidationError('Environment validation failed', {
+      issues: ['OMADA_PORTAL_AUTH_URL: required when OMADA_PORTAL_AUTH_MODE=portal'],
+    });
+  }
+}
+
 /** Boot-time environment (validated once). */
 export const env: Env = parseEnv(process.env);
+assertEnvConsistency(env);
 
 /**
  * Keys that must never appear in structured logs. Pino redaction matches by

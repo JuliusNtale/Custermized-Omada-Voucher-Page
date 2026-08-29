@@ -3,8 +3,8 @@ import { buildApp } from '../src/app.js';
 
 /**
  * Smoke-tests that every route module is actually registered and reachable.
- * The test environment has no DATABASE_URL/PAYMENT_PROVIDER/SMS_PROVIDER
- * configured (see vitest.config.ts), so DB-backed routes are expected to
+ * The test environment has no DATABASE_URL/PAYMENT_PROVIDER configured
+ * (see vitest.config.ts), so DB-backed routes are expected to
  * degrade to a clear 4xx rather than a real database round-trip - full
  * HTTP-level flows are covered against fakes in purchase-flow.test.ts.
  */

@@ -6,7 +6,10 @@
  * file). Flow:
  *
  *   packages -> phone -> POST /api/payments -> poll GET /api/payments/:id/status
- *     -> (once voucher CREATED) POST /api/portal/authenticate -> success
+ *     -> (once voucher CREATED) POST /api/portal/authenticate -> connected
+ *
+ * There is no SMS step: the customer is auto-authenticated here and shown the
+ * voucher code on-screen to reconnect later.
  *
  * Omada's External Portal redirect appends context about the connecting
  * client as query params; we read them once on load and pass them straight
@@ -38,8 +41,8 @@
   };
 
   var POLL_INTERVAL_MS = 3000;
-  // If a voucher hasn't been created ~2 minutes after payment SUCCESS,
-  // stop polling and point the customer at the SMS receipt instead of
+  // If a voucher hasn't been created ~2 minutes after payment SUCCESS, stop
+  // polling and tell the customer their access is still activating instead of
   // spinning forever (spec: never claim success before the voucher exists).
   var POLL_GIVE_UP_MS = 2 * 60 * 1000;
 
@@ -289,7 +292,7 @@
     if (manualFallback) {
       children.push(
         el('p', { class: 'subtitle' }, [
-          "Your voucher is ready. If you're not automatically online, enter this code on the Wi-Fi login screen:",
+          "Your access is ready. If you're not automatically online, enter this code on the Wi-Fi login screen:",
         ]),
       );
     } else {
@@ -298,8 +301,10 @@
 
     if (voucherCode) {
       children.push(el('div', { class: 'voucher-code' }, [voucherCode]));
+      children.push(
+        el('p', { class: 'status-detail' }, ['Keep this code to reconnect this device later.']),
+      );
     }
-    children.push(el('p', { class: 'status-detail' }, ["A receipt has also been sent to your phone by SMS."]));
 
     if (context.redirectUrl) {
       var continueBtn = el('button', { class: 'primary', type: 'button' }, ['Continue browsing']);
@@ -318,7 +323,7 @@
       el('h1', {}, ['Payment received']),
       el('p', { class: 'subtitle' }, [
         "We're still activating your Internet access - this is taking longer than usual. " +
-          "We'll send your access code by SMS as soon as it's ready.",
+          'Please keep this page open; it will connect automatically once ready.',
       ]),
     ]);
   }

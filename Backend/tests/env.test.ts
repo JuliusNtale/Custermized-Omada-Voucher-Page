@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseEnv } from '../src/config/env.js';
+import { assertEnvConsistency, parseEnv } from '../src/config/env.js';
 import { ValidationError } from '../src/lib/errors.js';
 
 const required = {
@@ -43,5 +43,38 @@ describe('parseEnv', () => {
     expect(() => parseEnv({ ...required, OMADA_MODE: 'bogus' })).toThrow(
       ValidationError,
     );
+  });
+});
+
+describe('assertEnvConsistency', () => {
+  it('rejects production + clickpesa without a checksum secret', () => {
+    const env = parseEnv({
+      ...required,
+      NODE_ENV: 'production',
+      PAYMENT_PROVIDER: 'clickpesa',
+      CLICKPESA_CLIENT_ID: 'x',
+      CLICKPESA_API_KEY: 'y',
+    });
+    expect(() => assertEnvConsistency(env)).toThrow(ValidationError);
+  });
+
+  it('allows production + clickpesa once the checksum secret is set', () => {
+    const env = parseEnv({
+      ...required,
+      NODE_ENV: 'production',
+      PAYMENT_PROVIDER: 'clickpesa',
+      CLICKPESA_CHECKSUM_SECRET: 'sekret',
+    });
+    expect(() => assertEnvConsistency(env)).not.toThrow();
+  });
+
+  it('allows fake payments in production without any ClickPesa config', () => {
+    const env = parseEnv({ ...required, NODE_ENV: 'production', PAYMENT_PROVIDER: 'fake' });
+    expect(() => assertEnvConsistency(env)).not.toThrow();
+  });
+
+  it('requires OMADA_PORTAL_AUTH_URL when auth mode is portal', () => {
+    const env = parseEnv({ ...required, OMADA_PORTAL_AUTH_MODE: 'portal' });
+    expect(() => assertEnvConsistency(env)).toThrow(ValidationError);
   });
 });

@@ -12,15 +12,18 @@ Backend orchestrator for a commercial Wi-Fi hotspot / mobile-money voucher platf
   The `CreateVoucherGroupOpenApiVO` request shape is verified field-for-field against
   `omada-openapi.json` (see `omada.voucher.service.ts`).
 - Phase 5-9 ✅ Fake payment provider, payment state machine + webhook (idempotent, signature-verified),
-  DB-backed job queue (`Job` table) driving voucher provisioning + SMS dispatch, fake SMS provider,
-  and an end-to-end simulated-purchase path - all runnable without a real controller via
-  `OMADA_MODE=mock`, and without real money/SMS via `PAYMENT_PROVIDER=fake` / `SMS_PROVIDER=fake`.
-- Phase 10-14 (real payment provider, real SMS provider, real Omada auth in production, external
-  captive-portal integration, production Docker Compose) are **not implemented yet**. In
-  particular, no real `PaymentProvider`/`SmsProvider` adapter exists - ClickPesa is the intended
-  first payment target, but its push-payment/webhook shape must come from ClickPesa's own API
-  docs before that adapter can be written (same rule this repo applies to the Omada API: never
-  invent a third-party API's shape).
+  DB-backed job queue (`Job` table) driving voucher provisioning, and an end-to-end
+  simulated-purchase path - all runnable without a real controller via `OMADA_MODE=mock`, and
+  without real money via `PAYMENT_PROVIDER=fake`.
+- Phase 10-11 ✅ Real payment provider (`ClickPesaProvider`, USSD-PUSH mobile money -
+  endpoints/checksum/webhook shape all taken from docs.clickpesa.com, credentials verified
+  live) and the External Portal Server captive-portal flow (`/api/portal/*`,
+  `src/scripts/omada-portal-setup.ts`). Going fully live needs the ClickPesa checksum key +
+  webhook URL registered, and a physical EAP adopted for the on-site Wi-Fi test.
+- **SMS was removed** - the portal auto-authenticates the client after a verified payment and
+  shows the voucher code on-screen; there is no "voucher ready" SMS.
+- Phase 12-14 (real Omada auth hardening in production, production Docker Compose, multi-tenant
+  admin) are not implemented yet.
 
 ---
 
@@ -54,18 +57,17 @@ Runs the Vitest suite against fakes/mocks only - no Postgres or real controller 
 - Omada auth + connectivity (the Phase 3 milestone), token caching, 401 → auto refresh
 - voucher-group create/get/delete against `MockOmadaClient` (schema-verified against `omada-openapi.json`)
 - phone/MAC normalisation
-- full simulated purchase: payment → verified webhook → voucher → SMS (Phase 9)
+- full simulated purchase: payment → verified webhook → voucher CREATED (Phase 9)
 - idempotency: duplicate webhook, duplicate in-flight payment, re-run voucher provisioning
-- failure paths: invalid webhook signature, failed payment, Omada failure after payment, SMS
-  failure after voucher creation (with retry)
+- failure paths: invalid webhook signature, failed payment, Omada failure after payment
 - HTTP route wiring (health/catalog/payments/vouchers/portal/admin all reachable, Zod errors
   always map to a typed 400, never a raw 500)
 - secret redaction in logs
 
 ## Local end-to-end purchase (no real money, no real controller)
 
-Set `OMADA_MODE=mock`, `PAYMENT_PROVIDER=fake`, `SMS_PROVIDER=fake` (the `.env.example` defaults
-already do this for payment/SMS) and run against a local Postgres:
+Set `OMADA_MODE=mock`, `PAYMENT_PROVIDER=fake` (the `.env.example` defaults already do this for
+payment) and run against a local Postgres:
 
 ```bash
 docker compose up -d postgres
@@ -87,18 +89,17 @@ curl -s -X POST http://localhost:3000/api/payments -H 'content-type: application
 curl -s -X POST http://localhost:3000/api/dev/payments/<paymentId>/simulate \
   -H 'content-type: application/json' -H 'x-admin-key: <ADMIN_API_KEY>' -d '{"status":"SUCCESS"}'
 
-# 3) poll status - the background job worker provisions the voucher and sends the SMS asynchronously
+# 3) poll status - the background job worker provisions the voucher asynchronously
 curl -s http://localhost:3000/api/payments/<paymentId>/status
-# -> { "paymentStatus": "SUCCESS", "voucherStatus": "CREATED", "smsStatus": "SENT", "voucherCode": "..." }
+# -> { "paymentStatus": "SUCCESS", "voucherStatus": "CREATED", "voucherCode": "..." }
 
 # 4) authenticate the client on Omada (mock or real, depending on OMADA_MODE)
 curl -s -X POST http://localhost:3000/api/portal/authenticate \
   -H 'content-type: application/json' -d '{"paymentId": "<paymentId>"}'
 ```
 
-`OMADA_MODE=mock` and `PAYMENT_PROVIDER=fake`/`SMS_PROVIDER=fake` are for development only - the
-`/api/dev/*` routes refuse to run when `NODE_ENV=production` or a real payment provider is
-configured.
+`OMADA_MODE=mock` and `PAYMENT_PROVIDER=fake` are for development only - the `/api/dev/*` routes
+refuse to run when `NODE_ENV=production` or a real payment provider is configured.
 
 ## Database (Phase 2)
 
@@ -124,8 +125,7 @@ curl http://localhost:3000/api/packages # active packages from the DB
 Model summary (explicit state enums, no ambiguous booleans):
 `Package`, `Customer`, `Payment` (PaymentStatus), `Voucher` (VoucherStatus,
 `paymentId` unique ⇒ one voucher per successful payment), `PortalSession`,
-`SmsMessage` (SmsStatus), `Job` (JobStatus; DB-backed queue, `@@unique([type, entityId])`
-for idempotency).
+`Job` (JobStatus; DB-backed queue, `@@unique([type, entityId])` for idempotency).
 
 ## Omada connectivity test (the first milestone)
 
@@ -257,7 +257,7 @@ Backend/
 
 ## Security notes
 
-- Secrets are read from environment variables only (`OMADA_CLIENT_SECRET`, payment/SMS secrets later) and never logged (Pino redaction).
+- Secrets are read from environment variables only (`OMADA_CLIENT_SECRET`, `CLICKPESA_*`) and never logged (Pino redaction).
 - Environment is validated at boot (Zod); a missing/invalid secret fails fast.
 - Admin endpoints are guarded by `x-admin-key` (`ADMIN_API_KEY`) — a placeholder until RBAC.
 - The repository-root `.env` (which contained the real client secret) was previously committed. It is now ignored by `.gitignore`. **Remove it from history**:
