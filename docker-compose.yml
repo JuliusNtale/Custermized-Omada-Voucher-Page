@@ -49,26 +49,8 @@ services:
     networks:
       - hotspot
 
-  postgres:
-    image: postgres:16-alpine
-    container_name: backend-postgres
-    restart: unless-stopped
-    # mem_limit: 256m   # enable the memory cgroup first - see the omada service
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: wifi_business
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
-    networks:
-      - hotspot
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d wifi_business"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
+  # (No database service - the backend uses a single-file SQLite DB on the
+  # `backend-data` volume. Migrations + seed run in its entrypoint on start.)
 
   backend:
     # Image is built OFF the Pi by .github/workflows/build-backend.yml and
@@ -97,12 +79,13 @@ services:
       HOST: 0.0.0.0
       # On the shared Docker network reach Omada by service name, not its IP.
       OMADA_BASE_URL: https://omada:8043
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/wifi_business
+      # SQLite file on the backend-data volume (overrides Backend/.env, which
+      # points at a local path for host-side `npm run dev`).
+      DATABASE_URL: file:/data/wifi_business.db
+    volumes:
+      - backend-data:/data
     ports:
       - "3000:3000"
-    depends_on:
-      postgres:
-        condition: service_healthy
     networks:
       - hotspot
 
@@ -132,7 +115,7 @@ services:
 volumes:
   omada-data:
   omada-logs:
-  postgres-data:
+  backend-data:
 
 networks:
   hotspot:

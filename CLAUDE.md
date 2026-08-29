@@ -24,7 +24,7 @@ All commands run from `Backend/`:
 
 ```bash
 npm install
-cp .env.example .env        # fill in real OMADA_* values (and DATABASE_URL for Phase 2 features)
+cp .env.example .env        # fill in real OMADA_* values (DATABASE_URL defaults to a local SQLite file)
 
 npm run dev                 # dev server (tsx watch), listens on :3000
 npm run build && npm start  # production-style build + run
@@ -35,15 +35,19 @@ npm run test:watch
 npm run omada:connect       # live connectivity test against a REAL Omada controller
 
 npm run db:generate         # prisma generate
-npm run db:deploy           # apply prisma/migrations to DATABASE_URL
+npm run db:deploy           # apply prisma/migrations to DATABASE_URL (SQLite file)
 npm run db:seed             # idempotent seed of the 4 default TZS packages
 npm run db:studio
 ```
 
+The DB is **SQLite** (one file, `DATABASE_URL=file:...`). In Docker the backend's
+entrypoint runs `prisma migrate deploy` + seed on every start, so there is no separate
+migration step - `docker compose pull backend && docker compose up -d` is the whole deploy.
+
 Run a single test file: `npx vitest run tests/omada-client.test.ts`.
 Run a single test by name: `npx vitest run -t "test name substring"`.
 
-Docker (from repo root, runs backend + postgres + omada + cloudflared on the `hotspot` network):
+Docker (from repo root, runs backend + omada + cloudflared on the `hotspot` network):
 ```bash
 docker compose pull backend    # image is built off-Pi by CI (see DEPLOY.md)
 docker compose up -d
@@ -63,7 +67,7 @@ container IP — this is hard-coded into `docker-compose.yml`'s `backend.environ
 ### Request flow
 `src/index.ts` (entrypoint) → `src/app.ts` (`buildApp()`, exported separately from start-up so
 tests can build the app without binding a port) → route plugins (`src/routes/*.ts`) → module
-services (`src/modules/*/`) → external systems (Omada controller, Postgres via Prisma).
+services (`src/modules/*/`) → external systems (Omada controller, SQLite via Prisma).
 
 All structured logging goes through the single Pino instance in `src/lib/logger.ts`
 (`app.ts` disables Fastify's own logger — `logger: false` — and logs `onRequest`/`onResponse`
@@ -114,9 +118,8 @@ adding Omada test coverage.
 
 ### Payment / provisioning ordering
 
-The Prisma schema (`prisma/schema.prisma`) encodes explicit state machines
-(`PaymentStatus`, `VoucherStatus`, `JobStatus`) rather than booleans, because the
-required flow is strict:
+The schema encodes explicit state machines (`PaymentStatus`, `VoucherStatus`, `JobStatus` -
+see `src/lib/db-enums.ts`) rather than booleans, because the required flow is strict:
 
 ```
 PAYMENT_CREATED → PAYMENT_PENDING → PAYMENT_SUCCESS
@@ -137,7 +140,11 @@ Simple repository/service split (`package.repository.ts` behind `PrismaPackageRe
 `package.service.ts` for business logic) backing `GET /api/packages`. Packages are DB-driven by
 design — never hard-code package pricing/duration in frontend or backend route code. If
 `DATABASE_URL` isn't set, catalog/`\ready` routes degrade to a clear 503 rather than crashing, so
-the Omada-only milestone can run without Postgres.
+the Omada-only milestone can run without a database.
+
+State enums (`PaymentStatus`, `VoucherStatus`, `JobStatus`) are **not** Prisma enums — SQLite
+has no enum type — they are `String` columns whose allowed values + TS union types live in
+`src/lib/db-enums.ts`. Import status types from there, never from `@prisma/client`.
 
 ### Admin auth
 

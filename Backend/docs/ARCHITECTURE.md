@@ -18,7 +18,7 @@ Omada Controller (Docker)      https://omada:8043  (service name, shared network
 Captive Portal (Next.js, separate repo)   -- before: static HTML template in ./Captive Portal
   |
   v
-Backend API (this repo)   [Fastify + PostgreSQL + Pino + Zod]
+Backend API (this repo)   [Fastify + SQLite (Prisma) + Pino + Zod]
   |
   +--------------------+
   |                    |
@@ -51,7 +51,7 @@ verified SUCCESS** (with duplicate-webhook / idempotency guards).
 
 ## Milestone roadmap
 
-1. ✅ Project setup (TS, Fastify, Docker, Postgres scaffold, env)
+1. ✅ Project setup (TS, Fastify, Docker, SQLite/Prisma scaffold, env)
 2. ✅ Database schema & migrations (Prisma), package seed, catalog API (`/api/packages`, `/ready`)
 3. ✅ Omada API client: auth + token + connectivity probe (paths verified against `/v3/api-docs`)
 4. ✅ Omada site/client/voucher services (voucher-group schema verified against `omada-openapi.json`)

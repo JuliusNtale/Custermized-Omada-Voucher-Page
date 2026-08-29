@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import type { Customer, Job, JobStatus, Package, Payment, PaymentStatus, PortalSession, Voucher, VoucherStatus } from '@prisma/client';
+import type { Customer, Job, Package, Payment, PortalSession, Voucher } from '@prisma/client';
+import type { JobStatus, PaymentStatus, VoucherStatus } from '../../src/lib/db-enums.js';
 import type { PackageRepository } from '../../src/modules/catalog/package.repository.js';
 import type { CustomerRepository } from '../../src/modules/customer/customer.repository.js';
 import type {
@@ -15,7 +16,7 @@ import type { CreatedVoucherFields, VoucherRepository } from '../../src/modules/
 import type { JobRepository } from '../../src/modules/jobs/job.repository.js';
 import type { JobType } from '../../src/modules/jobs/job.types.js';
 
-const ACTIVE_STATUSES: PaymentStatus[] = ['CREATED', 'PENDING', 'PROCESSING'];
+const ACTIVE_STATUSES: readonly string[] = ['CREATED', 'PENDING', 'PROCESSING'] satisfies PaymentStatus[];
 
 /** In-memory fakes for every repository interface, mirroring the DB constraints
  * that matter for the tests (unique transactionReference, one voucher per

@@ -4,7 +4,7 @@ Backend orchestrator for a commercial Wi-Fi hotspot / mobile-money voucher platf
 
 **Current status:**
 - Phase 1 ✅ Scaffolding (TypeScript, Fastify v5, Pino, Zod, Vitest, Docker).
-- Phase 2 ✅ Database schema (Prisma/PostgreSQL), migration, seed, package catalog API.
+- Phase 2 ✅ Database schema (Prisma/SQLite - single file), migration, seed, package catalog API.
 - Phase 3 ✅ Omada Open API connectivity layer (auth, token cache/refresh; endpoints verified
   against the installed controller v5.15.24.19 OpenAPI at `/v3/api-docs`, also checked into this
   repo as `omada-openapi.json`).
@@ -52,7 +52,7 @@ Server listens on `http://localhost:3000` (configurable via `PORT`/`HOST`).
 npm test
 ```
 
-Runs the Vitest suite against fakes/mocks only - no Postgres or real controller needed:
+Runs the Vitest suite against fakes/mocks only - no database or real controller needed:
 - env validation
 - Omada auth + connectivity (the Phase 3 milestone), token caching, 401 → auto refresh
 - voucher-group create/get/delete against `MockOmadaClient` (schema-verified against `omada-openapi.json`)
@@ -67,10 +67,9 @@ Runs the Vitest suite against fakes/mocks only - no Postgres or real controller 
 ## Local end-to-end purchase (no real money, no real controller)
 
 Set `OMADA_MODE=mock`, `PAYMENT_PROVIDER=fake` (the `.env.example` defaults already do this for
-payment) and run against a local Postgres:
+payment). The DB is a local SQLite file (`DATABASE_URL=file:./prisma/dev.db`):
 
 ```bash
-docker compose up -d postgres
 npm run db:generate && npm run db:deploy && npm run db:seed
 npm run dev
 ```
@@ -101,31 +100,28 @@ curl -s -X POST http://localhost:3000/api/portal/authenticate \
 `OMADA_MODE=mock` and `PAYMENT_PROVIDER=fake` are for development only - the `/api/dev/*` routes
 refuse to run when `NODE_ENV=production` or a real payment provider is configured.
 
-## Database (Phase 2)
+## Database
 
-Schema lives in `prisma/schema.prisma`; the migration is in `prisma/migrations/`.
-Requires a running PostgreSQL (include it via `docker compose up -d postgres`).
-
-```bash
-# 1) set DATABASE_URL in Backend/.env, e.g. postgresql://postgres:postgres@localhost:5432/wifi_business
-# 2) apply migrations + generate the client
-npm run db:generate
-npm run db:deploy          # apply prisma/migrations to the DB
-# 3) seed the initial packages
-npm run db:seed            # idempotent 500/1000/6000/16000 TZS packages
-```
-
-Verify:
+**SQLite**, one file - `DATABASE_URL=file:./prisma/dev.db` for local dev,
+`file:/data/wifi_business.db` (a Docker volume) in production. Schema in
+`prisma/schema.prisma`, migrations in `prisma/migrations/`.
 
 ```bash
-curl http://localhost:3000/ready        # 200 when DB is reachable
-curl http://localhost:3000/api/packages # active packages from the DB
+npm run db:generate       # prisma client
+npm run db:deploy         # apply migrations (creates the file if missing)
+npm run db:seed           # idempotent 500/1000/6000/16000 TZS packages
 ```
 
-Model summary (explicit state enums, no ambiguous booleans):
-`Package`, `Customer`, `Payment` (PaymentStatus), `Voucher` (VoucherStatus,
-`paymentId` unique ⇒ one voucher per successful payment), `PortalSession`,
-`Job` (JobStatus; DB-backed queue, `@@unique([type, entityId])` for idempotency).
+In Docker none of that is manual - the backend's `docker-entrypoint.sh` runs
+`prisma migrate deploy` + seed on every start.
+
+Verify: `curl http://localhost:3000/ready` (200 when the DB is reachable),
+`curl http://localhost:3000/api/packages`.
+
+Model summary (state columns are `String`, values/types in `src/lib/db-enums.ts`):
+`Package`, `Customer`, `Payment` (status: PaymentStatus), `Voucher`
+(status: VoucherStatus, `paymentId` unique ⇒ one voucher per successful payment),
+`PortalSession`, `Job` (status: JobStatus; queue, `@@unique([type, entityId])`).
 
 ## Omada connectivity test (the first milestone)
 
@@ -216,15 +212,16 @@ harmless/good things to have done, but neither was the actual fix.
 
 ## Docker
 
-The backend image plus PostgreSQL and (optionally) the Omada controller are wired in the repository-root `docker-compose.yml`. On the shared `hotspot` Docker network the backend reaches Omada by **service name** (`https://omada:8043`), never by container IP.
+The backend (SQLite, no DB server), Omada controller and Cloudflare tunnel are wired in the
+repository-root `docker-compose.yml`. On the shared `hotspot` network the backend reaches Omada
+by **service name** (`https://omada:8043`), never by container IP. The backend image is built
+off-box by CI - see `../DEPLOY.md`.
 
 ```bash
 cd ..                     # repository root
-docker compose build backend
+docker compose pull backend
 docker compose up -d
 ```
-
-> Only run `docker compose up` for Omada when your controller data volumes are ready; the `omada` service is unchanged from before.
 
 ## Directory layout
 

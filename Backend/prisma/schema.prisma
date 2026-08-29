@@ -1,40 +1,25 @@
 // Omada-Radius Wi-Fi voucher platform - Prisma schema
-// Generator / datasource. DATABASE_URL comes from Backend/.env
+//
+// SQLite (single file, no separate DB server) - this is a single-Pi appliance,
+// the data volume is tiny and low-concurrency, and a backup is "copy one file".
+// DATABASE_URL is a file: URL (see docker-compose.yml / Backend/.env).
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
 // ---------------------------------------------------------------------------
-// Explicit state machines (no ambiguous booleans like paymentSuccessful)
+// Status columns are plain strings: SQLite (via Prisma) has no native enum
+// type. The allowed values + their TS union types live in src/lib/db-enums.ts
+// (previously these were Prisma `enum`s exported from @prisma/client):
+//   Payment.status  -> PaymentStatus  (CREATED|PENDING|PROCESSING|SUCCESS|FAILED|CANCELLED|EXPIRED)
+//   Voucher.status  -> VoucherStatus  (NOT_CREATED|CREATING|CREATED|FAILED)
+//   Job.status      -> JobStatus      (PENDING|RUNNING|DONE|FAILED)
 // ---------------------------------------------------------------------------
-enum PaymentStatus {
-  CREATED
-  PENDING
-  PROCESSING
-  SUCCESS
-  FAILED
-  CANCELLED
-  EXPIRED
-}
-
-enum VoucherStatus {
-  NOT_CREATED
-  CREATING
-  CREATED
-  FAILED
-}
-
-enum JobStatus {
-  PENDING
-  RUNNING
-  DONE
-  FAILED
-}
 
 // ---------------------------------------------------------------------------
 // Catalog
@@ -81,19 +66,19 @@ model Customer {
 // ---------------------------------------------------------------------------
 
 model Payment {
-  id                   String        @id @default(cuid())
-  transactionReference String        @unique
+  id                   String   @id @default(cuid())
+  transactionReference String   @unique
   customerId           String
   packageId            String
   amount               Int
-  currency             String        @default("TZS")
+  currency             String   @default("TZS")
   phoneNumber          String
   provider             String
-  providerTransactionId String?      @unique
-  status               PaymentStatus @default(CREATED)
+  providerTransactionId String? @unique
+  status               String   @default("CREATED") // PaymentStatus
   failureReason        String?
-  createdAt            DateTime      @default(now())
-  updatedAt            DateTime      @updatedAt
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
   paidAt               DateTime?
 
   customer     Customer        @relation(fields: [customerId], references: [id])
@@ -110,16 +95,16 @@ model Payment {
 
 // One successful payment can provision at most one voucher (paymentId is unique).
 model Voucher {
-  id              String          @id @default(cuid())
-  paymentId       String          @unique
+  id              String   @id @default(cuid())
+  paymentId       String   @unique
   packageId       String
   omadaVoucherId  String?
   voucherCode     String?
   username        String?
   password        String?
   durationSeconds Int
-  status          VoucherStatus   @default(NOT_CREATED)
-  createdAt       DateTime        @default(now())
+  status          String   @default("NOT_CREATED") // VoucherStatus
+  createdAt       DateTime @default(now())
   expiresAt       DateTime?
 
   payment Payment @relation(fields: [paymentId], references: [id])
@@ -158,7 +143,7 @@ model Job {
   type       String // PROVISION_VOUCHER
   entityId   String // idempotency key (paymentId / voucherId)
   payload    Json
-  status     JobStatus @default(PENDING)
+  status     String    @default("PENDING") // JobStatus
   attempts   Int       @default(0)
   maxAttempts Int      @default(3)
   runAt      DateTime?

@@ -1,11 +1,11 @@
-import type { PaymentStatus } from '@prisma/client';
+import type { PaymentStatus } from '../../lib/db-enums.js';
 import type { Logger } from '../../lib/logger.js';
 import type { PaymentRepository } from './payment.repository.js';
 import type { JobRepository } from '../jobs/job.repository.js';
 import { JOB_TYPES, type ProvisionVoucherPayload } from '../jobs/job.types.js';
 import type { PaymentProvider, WebhookVerificationInput } from './payment.types.js';
 
-const TERMINAL_STATUSES: PaymentStatus[] = ['SUCCESS', 'FAILED', 'CANCELLED', 'EXPIRED'];
+const TERMINAL_STATUSES: readonly string[] = ['SUCCESS', 'FAILED', 'CANCELLED', 'EXPIRED'] satisfies PaymentStatus[];
 
 export interface WebhookResult {
   httpStatus: number;

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import type { Payment, PaymentStatus, PortalSession } from '@prisma/client';
+import type { Payment, PortalSession } from '@prisma/client';
+import type { PaymentStatus } from '../../lib/db-enums.js';
 import type { Logger } from '../../lib/logger.js';
 import { ValidationError } from '../../lib/errors.js';
 import { normalizeTzPhone } from '../../lib/phone.js';
@@ -71,7 +72,7 @@ export class PaymentService {
         { event: 'payment.duplicate_prevented', paymentId: active.id },
         'Reusing existing in-flight payment instead of creating a duplicate',
       );
-      return { paymentId: active.id, status: active.status, portalSessionId: session.id };
+      return { paymentId: active.id, status: active.status as PaymentStatus, portalSessionId: session.id };
     }
 
     const transactionReference = `TXN-${randomUUID()}`;
@@ -119,7 +120,7 @@ export class PaymentService {
       'Payment created and mobile-money push request sent',
     );
 
-    return { paymentId: updated.id, status: updated.status, portalSessionId: session.id };
+    return { paymentId: updated.id, status: updated.status as PaymentStatus, portalSessionId: session.id };
   }
 
   private async linkSession(

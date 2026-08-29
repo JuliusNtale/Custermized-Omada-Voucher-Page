@@ -13,21 +13,19 @@ docker compose pull backend          # grab the image CI built from main
 docker compose up -d                  # recreate only what changed
 ```
 
-### Migrations (only when `prisma/schema.prisma` changed)
+That's the whole deploy. **Migrations run automatically** - the backend's
+`docker-entrypoint.sh` runs `prisma migrate deploy` + the (idempotent) seed
+against the SQLite file on every start.
 
-The runtime image has no `prisma` CLI. Build the build-stage image once and run
-`migrate deploy` from it:
+### Database
+
+One SQLite file at `/data/wifi_business.db` on the `backend-data` Docker volume.
+Back it up by copying it:
 
 ```bash
-docker build --target build -t backend-build ./Backend
-docker run --rm --network omada-radius-server_hotspot \
-  -e DATABASE_URL=postgresql://postgres:postgres@postgres:5432/wifi_business \
-  backend-build npx prisma migrate deploy
+docker run --rm -v omada-radius-server_backend-data:/data -v "$PWD":/out alpine \
+  cp /data/wifi_business.db /out/wifi_business.$(date +%F).db
 ```
-
-(That `docker build --target build` is small - it stops before the runtime
-stage - but still runs `npm install`. On the Pi, prefer running the same
-command from a laptop with `DATABASE_URL` pointed at the Pi's `:5432`.)
 
 ### Where the image comes from
 
@@ -62,15 +60,16 @@ native ARM runner on every push to `main` that touches `Backend/**`, and pushes:
 docker compose up -d backend
 ```
 
-The base images (`omada`, `postgres`, `cloudflared`) are all pinned and already
-cached on the Pi; a reboot never re-pulls them.
+The base images (`omada`, `cloudflared`) are pinned and already cached on the
+Pi; a reboot never re-pulls them.
 
 ## After a power cut
 
 Nothing to do. `docker` is `systemctl enable`d, every service is
-`restart: unless-stopped`, images are local, and the Postgres data volume
-persists. The stack comes back on its own; the Cloudflare tunnel reconnects
-when the uplink returns.
+`restart: unless-stopped`, images are local, and the `backend-data` (SQLite)
+and `omada-data` volumes persist. The stack comes back on its own; the backend
+re-runs migrations (no-op if already applied) and the Cloudflare tunnel
+reconnects when the uplink returns.
 
 ## Building on the Pi anyway (last resort)
 
@@ -96,8 +95,8 @@ To turn them on:
 4. Uncomment the `mem_limit:` lines in `docker-compose.yml`, then
    `docker compose up -d`
 
-Suggested ceilings: omada 2g, backend 320m, postgres 256m, cloudflared 128m
-(ceilings, not reservations). Check headroom any time:
+Suggested ceilings: omada 2g, backend 320m, cloudflared 128m (ceilings, not
+reservations). Check headroom any time:
 
 ```bash
 free -m

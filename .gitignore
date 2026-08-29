@@ -11,6 +11,12 @@ dist/
 npm-debug.log*
 coverage/
 
+# --- SQLite (local dev DB) ---
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
 # --- OS / editor ---
 .DS_Store
 Thumbs.db
