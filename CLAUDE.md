@@ -54,8 +54,9 @@ build locally: `docker compose -f docker-compose.yml -f docker-compose.build.yml
 Offline image transfer: `scripts/backend-image-offline.sh`. Full deploy guide: `DEPLOY.md`.
 
 On that network the backend must reach Omada by service name (`https://omada:8043`), never by
-container IP — this is hard-coded into `docker-compose.yml`'s `backend.environment`. Every
-service has a `mem_limit` (the Pi has 3.7 GB and Omada uses ~1.3 GB).
+container IP — this is hard-coded into `docker-compose.yml`'s `backend.environment`. Per-service
+`mem_limit` lines exist but are commented out (the Pi's memory cgroup is off by default — see
+`DEPLOY.md`).
 
 ## Architecture
 

@@ -37,7 +37,18 @@ native ARM runner on every push to `main` that touches `Backend/**`, and pushes:
 - `ghcr.io/neuraltaletechnologies/omada-radius-server-backend:latest`
 - `…:sha-<commit>`
 
-The package is **public** (repo is public), so the Pi needs no `docker login`.
+**One-time:** GHCR packages start **private** even for a public repo. Pick one:
+
+- **Make it public** (recommended - the image has no secrets, they come from
+  `.env` at runtime): github.com/orgs/neuraltaletechnologies/packages →
+  `omada-radius-server-backend` → *Package settings* → *Change visibility* →
+  *Public*. Then the Pi pulls with no login, forever.
+- **Or authenticate the Pi**: create a classic PAT with `read:packages` (no
+  expiry), then once on the Pi:
+  ```bash
+  echo <PAT> | docker login ghcr.io -u JuliusNtale --password-stdin
+  ```
+  The credential is saved in `~/.docker/config.json` and survives reboots.
 
 ## Offline deploy (no internet / no registry)
 
@@ -68,13 +79,30 @@ docker compose -f docker-compose.yml -f docker-compose.build.yml build backend
 docker compose up -d backend
 ```
 
-## Memory ceilings
+## Memory ceilings (optional, needs a reboot)
 
-`docker-compose.yml` sets `mem_limit` per service (omada 2 GB, backend 320 MB,
-postgres 256 MB, cloudflared 128 MB) as a guardrail so one runaway process
-can't take the Pi down. These are ceilings, not reservations. Check headroom:
+`docker-compose.yml` has `mem_limit` lines per service **commented out**.
+Raspberry Pi OS ships with the memory cgroup controller disabled, so Docker
+would just print "kernel does not support memory limit" and ignore them.
+
+To turn them on:
+
+1. Append to `/boot/firmware/cmdline.txt` (one line, space-separated, no newline):
+   ```
+   cgroup_enable=memory cgroup_memory=1
+   ```
+2. `sudo reboot`
+3. Confirm: `cat /sys/fs/cgroup/cgroup.controllers` now lists `memory`
+4. Uncomment the `mem_limit:` lines in `docker-compose.yml`, then
+   `docker compose up -d`
+
+Suggested ceilings: omada 2g, backend 320m, postgres 256m, cloudflared 128m
+(ceilings, not reservations). Check headroom any time:
 
 ```bash
 free -m
 docker stats --no-stream
 ```
+
+Since the backend image is no longer built on the Pi, the big RAM spike is
+already gone - the ceilings are just a guardrail, not essential.
