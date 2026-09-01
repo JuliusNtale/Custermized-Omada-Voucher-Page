@@ -84,6 +84,11 @@ services:
       DATABASE_URL: file:/data/wifi_business.db
     volumes:
       - backend-data:/data
+      # Serve the captive-portal static files (Backend/public/) straight from
+      # the repo so portal HTML/CSS/JS tweaks take effect on `docker compose
+      # up -d` without an image rebuild. Read-only; the image still ships a
+      # baked copy as the fallback if this path is ever missing.
+      - ./Backend/public:/app/public:ro
     ports:
       - "3000:3000"
     networks:

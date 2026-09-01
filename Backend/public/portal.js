@@ -37,14 +37,21 @@
     paymentId: null,
     pollTimer: null,
     pollStartedAt: null,
+    paidAt: null,
     authenticated: false,
   };
 
   var POLL_INTERVAL_MS = 3000;
-  // If a voucher hasn't been created ~2 minutes after payment SUCCESS, stop
-  // polling and tell the customer their access is still activating instead of
-  // spinning forever (spec: never claim success before the voucher exists).
-  var POLL_GIVE_UP_MS = 2 * 60 * 1000;
+  // Hard cap on a single HTTP request - a captive/half-open network must never
+  // let fetch() hang forever.
+  var REQUEST_TIMEOUT_MS = 15 * 1000;
+  // Max time to wait for the customer to approve the mobile-money prompt (the
+  // USSD push itself expires well before this). After it, stop polling and let
+  // the customer retry instead of spinning forever.
+  var PAYMENT_WAIT_TIMEOUT_MS = 3 * 60 * 1000;
+  // After payment SUCCESS, how long to wait for the voucher to be provisioned
+  // before showing the "taking longer than usual" screen.
+  var PROVISIONING_TIMEOUT_MS = 2 * 60 * 1000;
 
   function el(tag, attrs, children) {
     var node = document.createElement(tag);
@@ -85,20 +92,39 @@
   }
 
   function apiFetch(path, options) {
-    return fetch(path, options).then(function (res) {
-      return res.json().then(
-        function (body) {
-          if (!res.ok) {
-            var message = (body && body.error && body.error.message) || 'Something went wrong. Please try again.';
-            throw new Error(message);
-          }
-          return body;
-        },
-        function () {
-          throw new Error('Unexpected response from server.');
-        },
-      );
-    });
+    var opts = options || {};
+    var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    var timedOut = false;
+    var timer = null;
+    if (controller) {
+      opts.signal = controller.signal;
+      timer = setTimeout(function () {
+        timedOut = true;
+        controller.abort();
+      }, REQUEST_TIMEOUT_MS);
+    }
+
+    return fetch(path, opts).then(
+      function (res) {
+        if (timer) clearTimeout(timer);
+        return res.json().then(
+          function (body) {
+            if (!res.ok) {
+              var message = (body && body.error && body.error.message) || 'Something went wrong. Please try again.';
+              throw new Error(message);
+            }
+            return body;
+          },
+          function () {
+            throw new Error('Unexpected response from server.');
+          },
+        );
+      },
+      function (err) {
+        if (timer) clearTimeout(timer);
+        throw new Error(timedOut ? 'The server took too long to respond. Please try again.' : 'Network error. Please try again.');
+      },
+    );
   }
 
   // ---- Views ----------------------------------------------------------
@@ -250,6 +276,7 @@
 
     if (status.paymentStatus === 'SUCCESS') {
       if (detail) detail.textContent = 'Payment received. Activating your Internet access…';
+      if (!state.paidAt) state.paidAt = Date.now();
 
       if (status.voucherStatus === 'CREATED') {
         clearInterval(state.pollTimer);
@@ -257,10 +284,18 @@
         return;
       }
 
-      if (status.voucherStatus === 'FAILED' || Date.now() - state.pollStartedAt > POLL_GIVE_UP_MS) {
+      if (status.voucherStatus === 'FAILED' || Date.now() - state.paidAt > PROVISIONING_TIMEOUT_MS) {
         clearInterval(state.pollTimer);
         renderProvisioningDelayed();
       }
+      return;
+    }
+
+    // Still PENDING / PROCESSING - give the customer a bounded window to approve
+    // the prompt, then stop polling instead of spinning forever.
+    if (Date.now() - state.pollStartedAt > PAYMENT_WAIT_TIMEOUT_MS) {
+      clearInterval(state.pollTimer);
+      renderPaymentTimeout();
     }
   }
 
@@ -325,6 +360,31 @@
         "We're still activating your Internet access - this is taking longer than usual. " +
           'Please keep this page open; it will connect automatically once ready.',
       ]),
+    ]);
+  }
+
+  function renderPaymentTimeout() {
+    var retryBtn = el('button', { class: 'primary', type: 'button' }, ['Try again']);
+    retryBtn.addEventListener('click', function () {
+      state.paymentId = null;
+      state.paidAt = null;
+      renderPackages();
+    });
+
+    var keepWaitingBtn = el('button', { class: 'link', type: 'button' }, ["I've paid - keep checking"]);
+    keepWaitingBtn.addEventListener('click', function () {
+      renderPending();
+      startPolling();
+    });
+
+    render([
+      el('div', { class: 'error-icon' }, ['!']),
+      el('h1', {}, ['No payment received']),
+      el('p', { class: 'subtitle' }, [
+        "We didn't get a mobile-money confirmation. If you didn't approve the prompt, no charge was made.",
+      ]),
+      retryBtn,
+      keepWaitingBtn,
     ]);
   }
 
