@@ -10,7 +10,7 @@ import type { PackageRepository } from '../catalog/package.repository.js';
 import type { CustomerRepository } from '../customer/customer.repository.js';
 import type { PaymentRepository } from './payment.repository.js';
 import type { PortalSessionRepository } from '../portal/portal-session.repository.js';
-import type { PaymentProvider } from './payment.types.js';
+import type { CreatePaymentRequestResult, PaymentProvider } from './payment.types.js';
 
 export interface CreatePaymentInput {
   packageId: string;
@@ -88,14 +88,29 @@ export class PaymentService {
 
     const session = await this.linkSession(mac, input, payment, customer.id);
 
-    const pushResult = await this.provider.createPaymentRequest({
-      transactionReference,
-      amount: pkg.price,
-      currency: pkg.currency,
-      phoneNumber: normalizedPhone,
-      callbackUrl: env.PAYMENT_CALLBACK_URL,
-      description: `${pkg.name} Internet package`,
-    });
+    let pushResult: CreatePaymentRequestResult;
+    try {
+      pushResult = await this.provider.createPaymentRequest({
+        transactionReference,
+        amount: pkg.price,
+        currency: pkg.currency,
+        phoneNumber: normalizedPhone,
+        callbackUrl: env.PAYMENT_CALLBACK_URL,
+        description: `${pkg.name} Internet package`,
+      });
+    } catch (err) {
+      // The provider push failed (bad request, unreachable, timeout). Mark the
+      // payment FAILED so it leaves the "active" set - otherwise it stays
+      // CREATED forever and the duplicate-prevention check below silently
+      // reuses this dead record on every retry, and no new push is ever sent.
+      const message = err instanceof Error ? err.message : String(err);
+      await this.payments.update(payment.id, { status: 'FAILED', failureReason: `push_request_error: ${message}`.slice(0, 480) });
+      this.logger.error(
+        { event: 'payment.push_failed', paymentId: payment.id, transactionReference, error: message },
+        'Mobile-money push request failed - payment marked FAILED',
+      );
+      throw err;
+    }
 
     // Never SUCCESS here, even if the provider's synchronous response claims
     // it - only a verified webhook may set SUCCESS (spec section 7 & 20).

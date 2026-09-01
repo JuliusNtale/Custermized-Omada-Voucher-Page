@@ -82,6 +82,13 @@ services:
       # SQLite file on the backend-data volume (overrides Backend/.env, which
       # points at a local path for host-side `npm run dev`).
       DATABASE_URL: file:/data/wifi_business.db
+    # The ER605's DNS forwarder intermittently drops external lookups, which
+    # surfaces as `getaddrinfo EAI_AGAIN api.clickpesa.com` and a failed
+    # mobile-money push. Resolve external names via public DNS instead;
+    # Docker's embedded resolver still handles the `omada` service name.
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     volumes:
       - backend-data:/data
       # Serve the captive-portal static files (Backend/public/) straight from

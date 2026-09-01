@@ -22,6 +22,14 @@ export interface UpdatePaymentInput {
 /** Statuses that mean "still in flight" - a new payment attempt should reuse these. */
 export const ACTIVE_PAYMENT_STATUSES: PaymentStatus[] = ['CREATED', 'PENDING', 'PROCESSING'];
 
+/**
+ * A mobile-money USSD push expires within a couple of minutes; a still-"active"
+ * payment older than this is dead (stuck CREATED after a failed push, or a
+ * PENDING the customer never approved). Past this age, duplicate-prevention
+ * ignores it so a fresh attempt actually sends a new push.
+ */
+const ACTIVE_PAYMENT_MAX_AGE_MS = 10 * 60 * 1000;
+
 /** Repository abstraction so payment.service.ts is unit-testable without a database. */
 export interface PaymentRepository {
   create(input: CreatePaymentInput): Promise<Payment>;
@@ -64,7 +72,12 @@ export class PrismaPaymentRepository implements PaymentRepository {
     packageId: string,
   ): Promise<Payment | null> {
     return this.client.payment.findFirst({
-      where: { customerId, packageId, status: { in: ACTIVE_PAYMENT_STATUSES } },
+      where: {
+        customerId,
+        packageId,
+        status: { in: ACTIVE_PAYMENT_STATUSES },
+        createdAt: { gte: new Date(Date.now() - ACTIVE_PAYMENT_MAX_AGE_MS) },
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
