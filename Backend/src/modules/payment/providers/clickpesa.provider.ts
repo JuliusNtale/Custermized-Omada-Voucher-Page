@@ -150,6 +150,20 @@ export class ClickPesaProvider implements PaymentProvider {
     if (this.cfg.checksumSecret) {
       const claimed = (payload as Record<string, unknown>).checksum;
       if (typeof claimed !== 'string' || !this.isValidChecksum(payload, claimed)) {
+        this.logger.warn(
+          {
+            event: 'payment.clickpesa.webhook.checksum_debug',
+            rawBody: input.rawBody.toString('utf8').slice(0, 2000),
+            expectedOverEnvelope: this.cfg.checksumSecret
+              ? computeClickPesaChecksum(payload as Record<string, unknown>, this.cfg.checksumSecret)
+              : undefined,
+            expectedOverData:
+              this.cfg.checksumSecret && payload.data
+                ? computeClickPesaChecksum(payload.data, this.cfg.checksumSecret)
+                : undefined,
+          },
+          'ClickPesa webhook checksum mismatch - raw body logged for debugging',
+        );
         return { valid: false, reason: 'invalid_checksum' };
       }
     } else {
@@ -203,10 +217,16 @@ export class ClickPesaProvider implements PaymentProvider {
       });
     }
 
+    // ClickPesa returns the token WITH a "Bearer " prefix already in it
+    // (`"token":"Bearer eyJ..."`). Store the bare token so call sites can add
+    // exactly one "Bearer " - otherwise the header is "Bearer Bearer ..." and
+    // every authenticated request is rejected.
+    const bareToken = payload.token.replace(/^Bearer\s+/i, '');
+
     // Docs: token is valid for 1 hour - cache with a safety margin.
-    this.tokenCache = { token: payload.token, expiresAt: Date.now() + 55 * 60 * 1000 };
+    this.tokenCache = { token: bareToken, expiresAt: Date.now() + 55 * 60 * 1000 };
     this.logger.info({ event: 'payment.clickpesa.token_obtained' }, 'Obtained ClickPesa access token');
-    return payload.token;
+    return bareToken;
   }
 
   private async request(path: string, init: { method?: string; headers: Record<string, string>; body?: string }): Promise<Response> {
