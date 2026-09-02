@@ -195,14 +195,22 @@ export function buildCreateVoucherRequest(
     amount: 1,
     codeLength: 8,
     codeForm: [0], // numeric codes are easier for customers to type
-    limitType: 2, // unlimited usage counts / online users
-    durationType: 1, // Voucher duration: expires after `duration` from use
+    // limitType 2 (Unlimited) is rejected by controller v5.15.24.19's Open API
+    // with a bare "General error" (-1). Use "Limited Online Users" = 1: the
+    // paid session is one device at a time, and the customer can still
+    // disconnect/reconnect with the same code while the voucher is valid.
+    limitType: 1,
+    limitNum: 1,
+    durationType: 1, // Voucher duration: the clock runs from first use
     duration: durationMinutes, // MINUTES
     timingType: 0, // timing by time
     rateLimit,
     trafficLimitEnable: false,
     applyToAllPortals: true,
-    ...(input.currency ? { currency: input.currency } : {}),
-    ...(input.unitPrice ? { unitPrice: input.unitPrice } : {}),
+    // NB: Omada's voucher `currency` is a fixed short-code list that does NOT
+    // include TZS (-42060 "Currency is not supported"). Price metadata is
+    // cosmetic in the Omada dashboard only - the real amount lives in our DB
+    // and ClickPesa - so we omit currency/unitPrice rather than send a wrong
+    // currency. Revisit if Omada adds TZS.
   };
 }
