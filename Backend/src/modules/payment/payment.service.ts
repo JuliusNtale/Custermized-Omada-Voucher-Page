@@ -75,7 +75,11 @@ export class PaymentService {
       return { paymentId: active.id, status: active.status as PaymentStatus, portalSessionId: session.id };
     }
 
-    const transactionReference = `TXN-${randomUUID()}`;
+    // Sent to the payment provider verbatim as its order reference and matched
+    // back from the webhook, so it must satisfy the strictest provider rule:
+    // ClickPesa requires alphanumeric only (no '-') and <= 20 characters.
+    // Time-prefixed (base36) for rough sortability + a random suffix.
+    const transactionReference = `T${Date.now().toString(36)}${randomUUID().replace(/-/g, '').slice(0, 8)}`;
     const payment = await this.payments.create({
       transactionReference,
       customerId: customer.id,
