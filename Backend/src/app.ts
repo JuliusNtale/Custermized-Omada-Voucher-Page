@@ -15,6 +15,7 @@ import { paymentsRoutes } from './routes/payments.js';
 import { voucherRoutes } from './routes/vouchers.js';
 import { portalRoutes } from './routes/portal.js';
 import { adminRoutes } from './routes/admin.js';
+import { adminUiRoutes } from './routes/admin-ui.js';
 
 /**
  * Build (but do not start) the Fastify application - useful for tests and the
@@ -82,6 +83,7 @@ export function buildApp(): FastifyInstance {
   void app.register(voucherRoutes);
   void app.register(portalRoutes);
   void app.register(adminRoutes);
+  void app.register(adminUiRoutes);
 
   setErrorHandler(app);
 
