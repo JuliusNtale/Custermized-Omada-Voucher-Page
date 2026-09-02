@@ -147,22 +147,20 @@ export class ClickPesaProvider implements PaymentProvider {
       return { valid: false, reason: 'invalid_json' };
     }
 
+    // ClickPesa signs the `data` object ONLY, and carries the checksum as a
+    // field INSIDE `data` (alongside `checksumMethod`), not at the envelope
+    // level. computeClickPesaChecksum strips checksum/checksumMethod before
+    // hashing, so passing `data` straight in is correct.
+    const data = payload.data ?? {};
     if (this.cfg.checksumSecret) {
-      const claimed = (payload as Record<string, unknown>).checksum;
-      if (typeof claimed !== 'string' || !this.isValidChecksum(payload, claimed)) {
+      const claimed = data.checksum;
+      if (typeof claimed !== 'string' || !this.isValidChecksum(data, claimed)) {
         this.logger.warn(
           {
-            event: 'payment.clickpesa.webhook.checksum_debug',
+            event: 'payment.clickpesa.webhook.checksum_mismatch',
             rawBody: input.rawBody.toString('utf8').slice(0, 2000),
-            expectedOverEnvelope: this.cfg.checksumSecret
-              ? computeClickPesaChecksum(payload as Record<string, unknown>, this.cfg.checksumSecret)
-              : undefined,
-            expectedOverData:
-              this.cfg.checksumSecret && payload.data
-                ? computeClickPesaChecksum(payload.data, this.cfg.checksumSecret)
-                : undefined,
           },
-          'ClickPesa webhook checksum mismatch - raw body logged for debugging',
+          'ClickPesa webhook checksum mismatch - rejected',
         );
         return { valid: false, reason: 'invalid_checksum' };
       }
@@ -173,7 +171,6 @@ export class ClickPesaProvider implements PaymentProvider {
       );
     }
 
-    const data = payload.data ?? {};
     const status: PaymentProviderStatus | undefined =
       payload.event === 'PAYMENT RECEIVED'
         ? 'SUCCESS'
